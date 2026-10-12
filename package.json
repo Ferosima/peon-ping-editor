@@ -4,6 +4,14 @@
   "description": "UI for peon-ping: edit sound packs, pick a pack per AI coding tool (Claude Code, Copilot, Cursor, Codex), install packs from the registry, style notifications, plus a macOS menu-bar toggle",
   "license": "MIT",
   "author": "Serhii Husachenko",
+  "homepage": "https://github.com/Ferosima/peon-ping-editor#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ferosima/peon-ping-editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ferosima/peon-ping-editor/issues"
+  },
   "keywords": [
     "peon-ping",
     "peon",

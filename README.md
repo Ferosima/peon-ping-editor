@@ -14,7 +14,7 @@ mute or change the volume from the macOS menu bar.
 You need [peon-ping](https://github.com/PeonPing/peon-ping#install) and Node.js 18+. Then one command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/OWNER/peon-ping-editor/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Ferosima/peon-ping-editor/main/install.sh | bash
 ```
 
 It installs the editor to `~/.peon-editor`, adds a `peon-editor` command, and on macOS puts **PeonBar** in the
@@ -115,7 +115,7 @@ when muted); this repo ships no game artwork.
 ## Development
 
 ```bash
-git clone https://github.com/OWNER/peon-ping-editor && cd peon-ping-editor
+git clone https://github.com/Ferosima/peon-ping-editor && cd peon-ping-editor
 npm start                 # run from the checkout
 npm test                  # node:test, no dependencies
 bash install.sh           # install this checkout instead of downloading

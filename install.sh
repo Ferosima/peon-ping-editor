@@ -1,7 +1,7 @@
 #!/bin/bash
 # peon-ping-editor installer: the editor UI plus, on macOS, the PeonBar menu-bar app (starts at login).
 #
-#   curl -fsSL https://raw.githubusercontent.com/OWNER/peon-ping-editor/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Ferosima/peon-ping-editor/main/install.sh | bash
 #
 # Re-run it any time to update. Environment overrides:
 #   PEON_EDITOR_REF   branch or tag to install (default: main)
@@ -9,7 +9,7 @@
 #   PEON_DIR          peon-ping install dir (default: ~/.claude/hooks/peon-ping)
 set -euo pipefail
 
-REPO="${PEON_EDITOR_REPO:-OWNER/peon-ping-editor}"
+REPO="${PEON_EDITOR_REPO:-Ferosima/peon-ping-editor}"
 REF="${PEON_EDITOR_REF:-main}"
 EDITOR_HOME="${PEON_EDITOR_HOME:-$HOME/.peon-editor}"
 BIN_DIR="$HOME/.local/bin"
@@ -39,7 +39,8 @@ find_node() {
   for c in "${PEON_EDITOR_NODE:-}" "$(command -v node 2>/dev/null || true)" /opt/homebrew/bin/node /usr/local/bin/node \
            "$HOME/.volta/bin/node" $(ls -d "$HOME"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V -r) \
            $(ls -d "$HOME"/.local/share/fnm/node-versions/*/installation/bin/node 2>/dev/null | sort -V -r); do
-    [ -n "$c" ] && [ -x "$c" ] && "$c" -e 'process.exit(+process.versions.node.split(".")[0] < 18)' 2>/dev/null && { echo "$c"; return 0; }
+    # process.exit needs a number: Node 20+ throws on a boolean
+    [ -n "$c" ] && [ -x "$c" ] && "$c" -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 18 ? 0 : 1)' 2>/dev/null && { echo "$c"; return 0; }
   done
   return 1
 }

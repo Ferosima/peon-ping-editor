@@ -20,6 +20,10 @@ jobs:
       - run: npm test
       - name: Shell scripts parse
         run: bash -n install.sh && bash -n uninstall.sh && bash -n menubar/build.sh
+      - name: Installer finds this Node
+        run: |
+          eval "$(sed -n '/^find_node() {/,/^}/p' install.sh)"
+          find_node
 
   menubar:
     runs-on: macos-latest

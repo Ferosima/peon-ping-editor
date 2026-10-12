@@ -5,6 +5,7 @@ const http = require('node:http');
 const path = require('node:path');
 const { createPeon } = require('./peon');
 
+const { version: VERSION } = require('../package.json');
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const AUDIO_TYPES = { '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.aiff': 'audio/aiff' };
 const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.icns': 'image/x-icns' };
@@ -42,8 +43,9 @@ function createServer({ port, peon = createPeon() }) {
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
 
     if (req.method === 'GET' && url.pathname === '/') {
-      const body = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'));
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length });
+      // Versioned favicon URL: browsers cache favicons (and failed fetches) hard, so a new version must look new
+      const body = Buffer.from(fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8').replaceAll('/favicon.png', `/favicon.png?v=${VERSION}`));
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-cache' });
       res.end(body);
       return;
     }
