@@ -99,14 +99,27 @@ function resolvePaths(env = process.env) {
     packsDir: path.join(peonDir, 'packs'),
     configPath: path.join(peonDir, 'config.json'),
     movesPath: expandHome(env.PEON_EDITOR_MOVES || path.join(path.dirname(peonDir), 'peon-editor-moves.json')),
-    peonBin: env.PEON_BIN === undefined ? findPeonBin() : env.PEON_BIN,
+    peonBin: env.PEON_BIN === undefined ? findPeonBin(peonDir) : env.PEON_BIN,
   };
 }
 
-function findPeonBin() {
-  const which = spawnSync('which', ['peon'], { encoding: 'utf8' });
-  const found = which.status === 0 ? which.stdout.trim() : '';
-  return found || '';
+// Started from PeonBar or launchd the editor gets a bare PATH, where `which peon` finds nothing.
+// The `peon` command is peon-ping's peon.sh, so run that script from the install dir directly.
+function findPeonBin(peonDir) {
+  const script = path.join(peonDir, 'peon.sh');
+  if (fs.existsSync(script)) return script;
+  const which = spawnSync('which', ['peon'], { encoding: 'utf8', env: CHILD_ENV });
+  return which.status === 0 ? which.stdout.trim() : '';
+}
+
+// peon.sh needs python3 and curl; prefer Homebrew's and ~/.local/bin over a bare system PATH
+const CHILD_ENV = {
+  ...process.env,
+  PATH: [path.join(os.homedir(), '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin', process.env.PATH || '/usr/bin:/bin:/usr/sbin:/sbin'].join(':'),
+};
+
+function peonCommand(bin, args) {
+  return bin.endsWith('.sh') ? ['/bin/bash', [bin, ...args]] : [bin, args];
 }
 
 function readJson(file, fallback) {
@@ -118,9 +131,16 @@ function readJson(file, fallback) {
 }
 
 function writeJson(file, data) {
-  const tmp = `${file}.tmp`;
+  // Write through a symlinked config (Nix, dotfile managers) instead of replacing the link with a file
+  let target = file;
+  try {
+    target = fs.realpathSync(file);
+  } catch {
+    // does not exist yet
+  }
+  const tmp = `${target}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`);
-  fs.renameSync(tmp, file);
+  fs.renameSync(tmp, target);
 }
 
 function basename(file) {
@@ -134,7 +154,8 @@ function normalizeTool(value) {
 
 function runAsync(bin, args, { input = '', timeout = INSTALL_TIMEOUT_MS } = {}) {
   return new Promise((resolve) => {
-    const proc = spawn(bin, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const [cmd, argv] = peonCommand(bin, args);
+    const proc = spawn(cmd, argv, { stdio: ['pipe', 'pipe', 'pipe'], env: CHILD_ENV });
     let out = '';
     proc.stdout.on('data', (d) => (out += d));
     proc.stderr.on('data', (d) => (out += d));
@@ -413,7 +434,9 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
   }
 
   function runPeon(args) {
-    const proc = spawnSync(peonBin, args, {
+    const [cmd, argv] = peonCommand(peonBin, args);
+    const proc = spawnSync(cmd, argv, {
+      env: CHILD_ENV,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 15000,
@@ -635,7 +658,7 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
   }
 
   async function testNotification() {
-    if (!peonBin) return { ok: false, message: 'Sending a test needs the peon CLI on PATH' };
+    if (!peonBin) return { ok: false, message: 'Sending a test needs peon.sh from peon-ping' };
     return runAsync(peonBin, ['notifications', 'test'], { timeout: 20000 });
   }
 
@@ -675,7 +698,7 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
 
   async function installPack(pack) {
     if (!PACK_NAME.test(pack)) return { ok: false, message: `Bad pack name "${pack}"` };
-    if (!peonBin) return { ok: false, message: 'Installing packs needs the peon CLI on PATH' };
+    if (!peonBin) return { ok: false, message: 'Installing packs needs peon.sh from peon-ping' };
     const known = await loadRegistry().catch(() => null);
     if (known && !known.some((p) => p.name === pack)) return { ok: false, message: `"${pack}" is not in the registry` };
     const result = await runAsync(peonBin, ['packs', 'install', pack]);
@@ -686,7 +709,7 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
 
   async function removePack(pack) {
     if (!installedPacks().includes(pack)) return { ok: false, message: `Pack "${pack}" is not installed` };
-    if (!peonBin) return { ok: false, message: 'Removing packs needs the peon CLI on PATH' };
+    if (!peonBin) return { ok: false, message: 'Removing packs needs peon.sh from peon-ping' };
     // `peon packs remove` asks "Remove N pack(s)? [y/N]" on stdin
     const result = await runAsync(peonBin, ['packs', 'remove', pack], { input: 'y\n', timeout: 30000 });
     if (result.ok && installedPacks().includes(pack)) return { ok: false, message: result.message || 'Remove failed' };

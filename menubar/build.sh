@@ -38,5 +38,5 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 # Ad-hoc signature: Apple silicon refuses to run unsigned binaries
-codesign --force --sign - "$APP" >/dev/null
+codesign --force --sign - "$APP" >/dev/null 2>&1 || { echo "codesign failed" >&2; exit 1; }
 echo "$APP"

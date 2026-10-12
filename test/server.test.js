@@ -29,7 +29,7 @@ function fixture() {
 }
 
 test('HTTP API', async (t) => {
-  const server = createServer({ port: 0, peon: fixture() });
+  const server = createServer({ peon: fixture() });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -55,6 +55,11 @@ test('HTTP API', async (t) => {
   assert.equal(moved.status, 200);
   assert.equal((await post('/api/move', { pack: 'demo', file: 'hi.wav', from: 'task.complete', to: 'nope' })).status, 400);
   assert.equal((await post('/api/toggle', {}, { Origin: 'http://evil.example' })).status, 403);
+  // DNS rebinding: a foreign Host header is refused even for reads
+  const http = require('node:http');
+  const status = await new Promise((resolve) =>
+    http.get({ host: '127.0.0.1', port: server.address().port, path: '/api/packs', headers: { Host: 'evil.example' } }, (r) => resolve(r.statusCode)));
+  assert.equal(status, 421);
 
   assert.equal((await (await fetch(base + '/api/tools')).json()).tools[0].id, 'claude');
   assert.equal((await post('/api/tools', { tool: 'copilot', pack: 'demo' })).status, 200);

@@ -20,6 +20,9 @@ curl -fsSL https://raw.githubusercontent.com/Ferosima/peon-ping-editor/main/inst
 It installs the editor to `~/.peon-editor`, adds a `peon-editor` command, and on macOS puts **PeonBar** in the
 menu bar and starts it at every login. Run the same command again to update.
 
+PeonBar is built on your Mac when Xcode or the Command Line Tools are installed; otherwise the installer downloads
+the prebuilt app from the latest release. It shows up as **PeonBar** in System Settings → General → Login Items.
+
 Open the editor from PeonBar → **Open pack editor…**, or run `peon-editor`.
 
 Uninstall:
@@ -111,6 +114,7 @@ when muted); this repo ships no game artwork.
 | `PEON_BIN` | `peon` from `PATH` | peon CLI; set to an empty string to edit `config.json` directly |
 | `PEON_EDITOR_REF` | `main` | branch or tag `install.sh` installs |
 | `PEON_EDITOR_HOME` | `~/.peon-editor` | where `install.sh` puts the app |
+| `PEON_EDITOR_NO_MENUBAR` | unset | `1` makes `install.sh` skip PeonBar (editor only) |
 
 ## Development
 

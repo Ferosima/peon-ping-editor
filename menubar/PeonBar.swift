@@ -4,7 +4,10 @@
 import AppKit
 
 let home = FileManager.default.homeDirectoryForCurrentUser.path
-let peonDir = ProcessInfo.processInfo.environment["PEON_DIR"] ?? "\(home)/.claude/hooks/peon-ping"
+// The installer records where peon-ping lives; launchd gives GUI apps no shell environment to read it from
+let peonDir = UserDefaults.standard.string(forKey: "peonDir")
+    ?? ProcessInfo.processInfo.environment["PEON_DIR"]
+    ?? "\(home)/.claude/hooks/peon-ping"
 let peonScript = "\(peonDir)/peon.sh"
 let configPath = "\(peonDir)/config.json"
 let pausedPath = "\(peonDir)/.paused"
@@ -81,6 +84,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var preview: NSSound?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // One menu-bar icon only: login item, installer and a manual launch can all start PeonBar
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.peonping.peonbar")
+            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+        if !others.isEmpty {
+            NSApp.terminate(nil)
+            return
+        }
         menu.delegate = self
         item.menu = menu
         slider.target = self
@@ -199,30 +209,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             try? FileManager.default.removeItem(atPath: agentPath)
             return
         }
+        // Same shape as install.sh writes, so Login Items shows "PeonBar"
         let plist: [String: Any] = [
             "Label": "com.peonping.peonbar",
-            "ProgramArguments": ["/usr/bin/open", "-a", Bundle.main.bundlePath],
+            "ProgramArguments": [Bundle.main.executablePath ?? "\(Bundle.main.bundlePath)/Contents/MacOS/PeonBar"],
+            "AssociatedBundleIdentifiers": [Bundle.main.bundleIdentifier ?? "com.peonping.peonbar"],
             "RunAtLoad": true,
+            "ProcessType": "Interactive",
         ]
         try? FileManager.default.createDirectory(atPath: (agentPath as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
         (plist as NSDictionary).write(toFile: agentPath, atomically: true)
     }
 
-    @objc func toggleSounds() {
-        runPeon([paused ? "resume" : "pause"])
-        refreshIcon()
+    // peon.sh runs python, which takes a moment: never on the main thread, or the menu bar stutters
+    func runInBackground(_ args: [String], then done: (() -> Void)? = nil) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            runPeon(args)
+            DispatchQueue.main.async { done?() }
+        }
     }
+
+    @objc func toggleSounds() {
+        runInBackground([paused ? "resume" : "pause"]) { [weak self] in self?.refreshIcon() }
+    }
+
+    var pendingVolume: DispatchWorkItem?
 
     @objc func volumeChanged(_ sender: NSSlider) {
         let percent = Int(sender.doubleValue.rounded())
         volumeLabel.stringValue = "Volume \(percent)%"
-        // Write only when the drag ends, so peon.sh is not spawned on every pixel
-        guard let event = NSApp.currentEvent, event.type == .leftMouseUp else { return }
-        let value = String(format: "%.2f", Double(percent) / 100)
-        DispatchQueue.global().async { [weak self] in
-            runPeon(["volume", value])
-            DispatchQueue.main.async { self?.playSample(volume: Float(percent) / 100) }
+        // Save once the slider settles (mouse or keyboard), not on every step
+        pendingVolume?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.runInBackground(["volume", String(format: "%.2f", Double(percent) / 100)]) {
+                self?.playSample(volume: Float(percent) / 100)
+            }
         }
+        pendingVolume = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
     func playSample(volume: Float) {
@@ -237,7 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func usePack(_ sender: NSMenuItem) {
         guard let name = sender.representedObject as? String else { return }
-        runPeon(["packs", "use", name])
+        runInBackground(["packs", "use", name])
     }
 
     // The installer writes this launcher; it finds node (Homebrew, nvm, volta, …) on its own
@@ -262,9 +286,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 proc.standardError = FileHandle.nullDevice
                 try? proc.run()
                 // Wait for the server instead of guessing how long node takes to start
-                for _ in 0..<30 {
-                    Thread.sleep(forTimeInterval: 0.2)
-                    if (try? Data(contentsOf: editorURL.appendingPathComponent("api/packs"))) != nil { break }
+                var up = false
+                for _ in 0..<40 {
+                    Thread.sleep(forTimeInterval: 0.25)
+                    if (try? Data(contentsOf: editorURL.appendingPathComponent("api/packs"))) != nil { up = true; break }
+                    if !proc.isRunning { break }
+                }
+                if !up {
+                    DispatchQueue.main.async {
+                        Self.alert("The editor did not start",
+                                   "Port 8787 may be taken by another app, or peon-ping/Node is missing. Run peon-editor in Terminal to see the error.")
+                    }
+                    return
                 }
             }
             DispatchQueue.main.async { NSWorkspace.shared.open(editorURL) }

@@ -72,7 +72,7 @@ if (!fs.existsSync(peon.paths.packsDir)) {
   process.exit(1);
 }
 
-const server = createServer({ port: opts.port, peon });
+const server = createServer({ peon });
 server.on('error', (err) => {
   console.error(err.code === 'EADDRINUSE' ? `Port ${opts.port} is busy, try --port <n>` : err.message);
   process.exit(1);

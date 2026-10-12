@@ -247,3 +247,22 @@ test('notification settings: read, validate, save', async () => {
   assert.equal((await peon.setNotifications({ theme: 'pink' })).ok, false);
   assert.equal(config().notification_position, 'bottom-right');
 });
+
+test('finds peon.sh in the install dir without relying on PATH', () => {
+  const { resolvePaths } = require('../src/peon');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'peon-editor-bin-'));
+  fs.writeFileSync(path.join(dir, 'peon.sh'), '#!/bin/bash\n');
+  assert.equal(resolvePaths({ PEON_DIR: dir, PATH: '/nonexistent' }).peonBin, path.join(dir, 'peon.sh'));
+  assert.equal(resolvePaths({ PEON_DIR: dir, PEON_BIN: '' }).peonBin, '');
+});
+
+test('writes through a symlinked config.json', () => {
+  const { peon, config } = setup();
+  const cfgPath = peon.paths.configPath;
+  const real = `${cfgPath}.real`;
+  fs.renameSync(cfgPath, real);
+  fs.symlinkSync(real, cfgPath);
+  assert.equal(peon.setVolume(0.3).ok, true);
+  assert.equal(fs.lstatSync(cfgPath).isSymbolicLink(), true);
+  assert.equal(config().volume, 0.3);
+});

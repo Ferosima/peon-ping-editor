@@ -7,6 +7,15 @@
 #   PEON_EDITOR_REF   branch or tag to install (default: main)
 #   PEON_EDITOR_HOME  where the app lives (default: ~/.peon-editor)
 #   PEON_DIR          peon-ping install dir (default: ~/.claude/hooks/peon-ping)
+#   PEON_EDITOR_NO_MENUBAR=1  skip PeonBar (editor only)
+#
+# Everything runs from main() at the bottom, so a download cut off half-way does nothing.
+
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo "peon-ping-editor: run this installer with bash (curl ... | bash), not sh" >&2
+  exit 1
+fi
+
 set -euo pipefail
 
 REPO="${PEON_EDITOR_REPO:-Ferosima/peon-ping-editor}"
@@ -22,18 +31,7 @@ say()  { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mx\033[0m %s\n' "$*" >&2; exit 1; }
 
-# --- 1. peon-ping must already be there ---------------------------------------
-if [ ! -f "$PEON_DIR/peon.sh" ]; then
-  die "peon-ping is not installed (looked in $PEON_DIR).
-  Install it first, then run this installer again:
-
-    curl -fsSL https://raw.githubusercontent.com/PeonPing/peon-ping/main/install.sh | bash
-
-  or with Homebrew:  brew install PeonPing/tap/peon-ping && peon-ping-setup"
-fi
-
-# --- 2. Node.js 18+ ----------------------------------------------------------
-# Same search as the launcher below, so whatever works here works for PeonBar too.
+# Copied verbatim into the launcher, so the installer and PeonBar agree on which node to use.
 find_node() {
   local c
   for c in "${PEON_EDITOR_NODE:-}" "$(command -v node 2>/dev/null || true)" /opt/homebrew/bin/node /usr/local/bin/node \
@@ -44,109 +42,174 @@ find_node() {
   done
   return 1
 }
-NODE="$(find_node)" || die "Node.js 18 or newer is required.
-  Install it (for example: brew install node) and run this installer again."
-say "Using Node $("$NODE" -v) ($NODE)"
 
-# --- 3. Get the app -----------------------------------------------------------
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-SRC=""
-# Running from a checkout (bash install.sh)? Install that instead of downloading.
-if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
-  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  [ -f "$HERE/bin/peon-editor.js" ] && SRC="$HERE"
-fi
-if [ -z "$SRC" ]; then
-  say "Downloading $REPO@$REF"
-  curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$REF" | tar -xz -C "$TMP" || die "Download failed"
-  SRC="$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1)"
-  [ -f "$SRC/bin/peon-editor.js" ] || die "Unexpected archive layout"
-fi
+# Without the Command Line Tools, even `xcrun --find` pops up an "install developer tools" dialog
+have_swiftc() {
+  xcode-select -p >/dev/null 2>&1 && xcrun --find swiftc >/dev/null 2>&1
+}
 
-# A running editor keeps the old code in memory; stop it so the next launch picks up this version
-pkill -f "$EDITOR_HOME/app/bin/peon-editor.js" 2>/dev/null || true
+check_peon_ping() {
+  [ -f "$PEON_DIR/peon.sh" ] && return 0
+  die "peon-ping is not installed (looked in $PEON_DIR).
+  Install it first, then run this installer again:
 
-mkdir -p "$EDITOR_HOME"
-rm -rf "$EDITOR_HOME/app.new"
-mkdir -p "$EDITOR_HOME/app.new"
-for item in bin src public menubar package.json LICENSE README.md install.sh uninstall.sh; do
-  [ -e "$SRC/$item" ] && cp -R "$SRC/$item" "$EDITOR_HOME/app.new/"
-done
-rm -rf "$EDITOR_HOME/app"
-mv "$EDITOR_HOME/app.new" "$EDITOR_HOME/app"
-VERSION="$("$NODE" -p "require('$EDITOR_HOME/app/package.json').version")"
-say "Installed peon-ping-editor $VERSION to $EDITOR_HOME/app"
+    curl -fsSL https://raw.githubusercontent.com/PeonPing/peon-ping/main/install.sh | bash
 
-# --- 4. Launcher: ~/.local/bin/peon-editor ------------------------------------
-mkdir -p "$BIN_DIR"
-{
-  echo '#!/bin/bash'
-  echo '# peon-ping-editor launcher (written by the installer). Finds node itself, so nvm/Homebrew changes do not break it.'
-  declare -f find_node
-  echo 'NODE="$(find_node)" || { echo "peon-editor: Node.js 18+ not found" >&2; exit 1; }'
-  echo "exec \"\$NODE\" \"$EDITOR_HOME/app/bin/peon-editor.js\" \"\$@\""
-} > "$LAUNCHER"
-chmod +x "$LAUNCHER"
-case ":$PATH:" in
-  *":$BIN_DIR:"*) ;;
-  *) warn "$BIN_DIR is not on your PATH. Add it to run 'peon-editor' from a terminal:
+  or with Homebrew:  brew install PeonPing/tap/peon-ping && peon-ping-setup"
+}
+
+# Prints the directory holding the app sources: this checkout, or a fresh download
+fetch_sources() {
+  local here=""
+  if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+    here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  fi
+  # A checkout (bash install.sh) installs itself; the installed copy in ~/.peon-editor downloads the latest instead
+  if [ -n "$here" ] && [ -f "$here/bin/peon-editor.js" ] && [ "$here" != "$(cd "$EDITOR_HOME" 2>/dev/null && pwd -P)/app" ]; then
+    echo "$here"
+    return
+  fi
+  say "Downloading $REPO@$REF" >&2
+  curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$REF" -o "$TMP/src.tar.gz" || die "Download failed: https://github.com/$REPO (ref $REF)"
+  mkdir -p "$TMP/src"
+  tar -xzf "$TMP/src.tar.gz" -C "$TMP/src" || die "Could not unpack the download"
+  local dir
+  for dir in "$TMP"/src/*/; do
+    if [ -f "$dir/bin/peon-editor.js" ]; then
+      echo "${dir%/}"
+      return
+    fi
+  done
+  die "Unexpected archive layout"
+}
+
+install_app() {
+  local src="$1" item
+  # A running editor keeps the old code in memory; stop it so the next launch picks up this version
+  pkill -f "$EDITOR_HOME/app/bin/peon-editor.js" 2>/dev/null || true
+  mkdir -p "$EDITOR_HOME"
+  rm -rf "$EDITOR_HOME/app.new"
+  mkdir -p "$EDITOR_HOME/app.new"
+  for item in bin src public menubar package.json LICENSE README.md install.sh uninstall.sh; do
+    if [ -e "$src/$item" ]; then
+      cp -R "$src/$item" "$EDITOR_HOME/app.new/"
+    fi
+  done
+  [ -f "$EDITOR_HOME/app.new/bin/peon-editor.js" ] || die "Copy failed"
+  rm -rf "$EDITOR_HOME/app"
+  mv "$EDITOR_HOME/app.new" "$EDITOR_HOME/app"
+  VERSION="$(PKG="$EDITOR_HOME/app/package.json" "$NODE" -p "require(process.env.PKG).version")"
+  say "Installed peon-ping-editor $VERSION to $EDITOR_HOME/app"
+}
+
+write_launcher() {
+  mkdir -p "$BIN_DIR"
+  {
+    echo '#!/bin/bash'
+    echo '# peon-ping-editor launcher (written by the installer).'
+    echo '# Finds node on its own and fixes PATH, because PeonBar and launchd start it with a bare PATH.'
+    echo 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"'
+    printf 'export PEON_DIR=%q\n' "$PEON_DIR"
+    declare -f find_node
+    echo 'NODE="$(find_node)" || { echo "peon-editor: Node.js 18+ not found" >&2; exit 1; }'
+    printf 'exec "$NODE" %q "$@"\n' "$EDITOR_HOME/app/bin/peon-editor.js"
+  } > "$LAUNCHER.new"
+  chmod +x "$LAUNCHER.new"
+  mv "$LAUNCHER.new" "$LAUNCHER"
+  case ":$PATH:" in
+    *":$BIN_DIR:"*) ;;
+    *) warn "$BIN_DIR is not on your PATH. To run 'peon-editor' from a terminal, add it:
     echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc" ;;
-esac
+  esac
+}
 
-# --- 5. PeonBar (macOS menu bar) -----------------------------------------------
-if [ "$(uname -s)" != "Darwin" ]; then
-  say "Done. Run: peon-editor"
-  exit 0
-fi
-
-BUILT=""
-if xcrun --find swiftc >/dev/null 2>&1; then
-  say "Building PeonBar"
-  if BUILT="$(bash "$EDITOR_HOME/app/menubar/build.sh" "$TMP/build" 2>"$TMP/build.log" | tail -1)" && [ -d "$BUILT" ]; then :; else
-    BUILT=""
-    warn "Local build failed ($(tail -1 "$TMP/build.log" 2>/dev/null)); using the prebuilt app"
+# Prints the path of a PeonBar.app to install, or nothing
+get_peonbar() {
+  local built
+  if have_swiftc; then
+    say "Building PeonBar" >&2
+    if built="$(bash "$EDITOR_HOME/app/menubar/build.sh" "$TMP/build" 2>"$TMP/build.log" | tail -1)" && [ -d "$built" ]; then
+      echo "$built"
+      return
+    fi
+    warn "Building PeonBar failed: $(tail -1 "$TMP/build.log" 2>/dev/null)"
   fi
-fi
-if [ -z "$BUILT" ]; then
-  say "Downloading prebuilt PeonBar"
-  if curl -fsSL "https://github.com/$REPO/releases/latest/download/PeonBar.zip" -o "$TMP/PeonBar.zip" &&
+  say "Downloading prebuilt PeonBar" >&2
+  if curl -fsSL "https://github.com/$REPO/releases/latest/download/PeonBar.zip" -o "$TMP/PeonBar.zip" 2>/dev/null &&
      ditto -x -k "$TMP/PeonBar.zip" "$TMP/prebuilt" && [ -d "$TMP/prebuilt/PeonBar.app" ]; then
-    BUILT="$TMP/prebuilt/PeonBar.app"
+    echo "$TMP/prebuilt/PeonBar.app"
   fi
-fi
+}
 
-if [ -z "$BUILT" ]; then
-  warn "Could not build or download PeonBar, so the menu-bar app was skipped.
-  Install Xcode Command Line Tools (xcode-select --install) and run this installer again.
-  The editor itself works: peon-editor"
-  exit 0
-fi
+install_peonbar() {
+  local built
+  built="$(get_peonbar)"
+  if [ -z "$built" ]; then
+    warn "PeonBar was skipped: it could not be built (no Xcode Command Line Tools) or downloaded.
+  Install the tools with: xcode-select --install   then run this installer again.
+  The editor works without it: peon-editor"
+    return 1
+  fi
 
-pkill -x PeonBar 2>/dev/null || true
-mkdir -p "$(dirname "$APP")"
-rm -rf "$APP"
-ditto "$BUILT" "$APP"
-xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
-defaults write com.peonping.peonbar editorLauncher "$LAUNCHER"
+  pkill -x PeonBar 2>/dev/null || true
+  mkdir -p "$(dirname "$APP")"
+  rm -rf "$APP"
+  ditto "$built" "$APP"
+  xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+  defaults write com.peonping.peonbar editorLauncher "$LAUNCHER"
+  defaults write com.peonping.peonbar peonDir "$PEON_DIR"
 
-# LaunchAgent: start PeonBar at every login
-mkdir -p "$(dirname "$AGENT")"
-cat > "$AGENT" <<PLIST
+  # LaunchAgent: start PeonBar at every login. Pointing at the binary (not /usr/bin/open) and naming the bundle
+  # makes System Settings → Login Items show "PeonBar" instead of "open".
+  mkdir -p "$(dirname "$AGENT")"
+  cat > "$AGENT" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.peonping.peonbar</string>
-  <key>ProgramArguments</key><array><string>/usr/bin/open</string><string>-a</string><string>$APP</string></array>
+  <key>ProgramArguments</key><array><string>$APP/Contents/MacOS/PeonBar</string></array>
+  <key>AssociatedBundleIdentifiers</key><array><string>com.peonping.peonbar</string></array>
   <key>RunAtLoad</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
 </dict>
 </plist>
 PLIST
-launchctl unload "$AGENT" 2>/dev/null || true
-launchctl load -w "$AGENT" 2>/dev/null || true
-open "$APP"
+  launchctl bootout "gui/$(id -u)/com.peonping.peonbar" 2>/dev/null || launchctl unload "$AGENT" 2>/dev/null || true
+  # bootstrap starts it right away (RunAtLoad); fall back to opening the app directly
+  launchctl bootstrap "gui/$(id -u)" "$AGENT" 2>/dev/null || launchctl load -w "$AGENT" 2>/dev/null || true
+  sleep 1
+  pgrep -x PeonBar >/dev/null || open "$APP"
+  return 0
+}
 
-say "Done. PeonBar (the peon face) is in your menu bar and starts at login."
-echo "    Open the editor from PeonBar → Open pack editor…, or run: peon-editor"
-echo "    Uninstall: bash $EDITOR_HOME/app/uninstall.sh"
+main() {
+  check_peon_ping
+  NODE="$(find_node)" || die "Node.js 18 or newer is required.
+  Install it (for example: brew install node) and run this installer again."
+  say "Using Node $("$NODE" -v) ($NODE)"
+
+  TMP="$(mktemp -d)"
+  trap 'rm -rf "$TMP"' EXIT
+
+  # A plain assignment, so a failed download stops the installer (set -e ignores failures inside arguments)
+  local src
+  src="$(fetch_sources)"
+  install_app "$src"
+  write_launcher
+
+  if [ "$(uname -s)" != "Darwin" ] || [ "${PEON_EDITOR_NO_MENUBAR:-}" = 1 ]; then
+    say "Done. Run: peon-editor"
+    return
+  fi
+  if install_peonbar; then
+    say "Done. PeonBar (the peon face) is in your menu bar and starts at login."
+    echo "    Open the editor from PeonBar → Open pack editor…, or run: peon-editor"
+  else
+    say "Done (without PeonBar). Run: peon-editor"
+  fi
+  echo "    Update: run the same install command again"
+  echo "    Uninstall: bash $EDITOR_HOME/app/uninstall.sh"
+}
+
+main "$@"

@@ -36,10 +36,16 @@ function readBody(req) {
   });
 }
 
-function createServer({ port, peon = createPeon() }) {
-  const allowedOrigins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
-
-  return http.createServer(async (req, res) => {
+function createServer({ peon = createPeon() } = {}) {
+  const server = http.createServer(async (req, res) => {
+    const port = server.address().port;
+    // Only answer to our own address: a page on another domain that re-points its DNS at 127.0.0.1
+    // (DNS rebinding) sends its own Host header and gets nothing
+    const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
+    if (!hosts.includes(String(req.headers.host || '').toLowerCase())) {
+      res.writeHead(421).end();
+      return;
+    }
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
 
     if (req.method === 'GET' && url.pathname === '/') {
@@ -128,7 +134,7 @@ function createServer({ port, peon = createPeon() }) {
 
     if (req.method === 'POST' && actions[url.pathname]) {
       const origin = req.headers.origin;
-      if (origin && !allowedOrigins.has(origin)) {
+      if (origin && !hosts.some((h) => origin === `http://${h}`)) {
         res.writeHead(403).end();
         return;
       }
@@ -146,6 +152,7 @@ function createServer({ port, peon = createPeon() }) {
 
     res.writeHead(404).end();
   });
+  return server;
 }
 
 module.exports = { createServer };

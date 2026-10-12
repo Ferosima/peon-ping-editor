@@ -8,7 +8,7 @@ APP="$HOME/Applications/PeonBar.app"
 AGENT="$HOME/Library/LaunchAgents/com.peonping.peonbar.plist"
 
 if [ -f "$AGENT" ]; then
-  launchctl unload "$AGENT" 2>/dev/null
+  launchctl bootout "gui/$(id -u)/com.peonping.peonbar" 2>/dev/null || launchctl unload "$AGENT" 2>/dev/null
   rm -f "$AGENT"
 fi
 pkill -x PeonBar 2>/dev/null
