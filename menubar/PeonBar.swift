@@ -13,6 +13,36 @@ let configPath = "\(peonDir)/config.json"
 let pausedPath = "\(peonDir)/.paused"
 let editorURL = URL(string: "http://127.0.0.1:8787/")!
 
+// Written by install.sh; used to check for and install updates
+let defaults = UserDefaults.standard
+let safeSlug = { (v: String?, fallback: String) -> String in
+    guard let v = v, v.range(of: "^[A-Za-z0-9._/-]+$", options: .regularExpression) != nil else { return fallback }
+    return v
+}
+let updateRepo = safeSlug(defaults.string(forKey: "repo"), "Ferosima/peon-ping-editor")
+let updateRef = safeSlug(defaults.string(forKey: "ref"), "main")
+let editorHome = defaults.string(forKey: "editorHome") ?? "\(home)/.peon-editor"
+
+func installedVersion() -> String {
+    let pkg = readJSON("\(editorHome)/app/package.json")
+    return pkg["version"] as? String
+        ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        ?? "0.0.0"
+}
+
+// Plain numeric compare of x.y.z; anything after a "-" is ignored
+func isNewer(_ a: String, than b: String) -> Bool {
+    let parts = { (v: String) -> [Int] in
+        v.split(separator: "-").first.map { $0.split(separator: ".").map { Int($0) ?? 0 } } ?? []
+    }
+    let x = parts(a), y = parts(b)
+    for i in 0..<max(x.count, y.count) {
+        let l = i < x.count ? x[i] : 0, r = i < y.count ? y[i] : 0
+        if l != r { return l > r }
+    }
+    return false
+}
+
 func readConfig() -> [String: Any] {
     guard let data = FileManager.default.contents(atPath: configPath),
           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
@@ -98,6 +128,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         slider.isContinuous = true
         refreshIcon()
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.refreshIcon() }
+        announceFinishedUpdate()
+        // Look for a new version shortly after login, then every few hours (at most once a day)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in self?.autoCheck() }
+        Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in self?.autoCheck() }
     }
 
     var paused: Bool { FileManager.default.fileExists(atPath: pausedPath) }
@@ -178,12 +212,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         editor.target = self
         menu.addItem(editor)
 
+        let update: NSMenuItem
+        if updating {
+            update = NSMenuItem(title: "Updating…", action: nil, keyEquivalent: "")
+            update.isEnabled = false
+        } else if let latest = availableVersion {
+            update = NSMenuItem(title: "Update to \(latest)…", action: #selector(checkForUpdates), keyEquivalent: "")
+        } else {
+            update = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        }
+        update.target = self
+        menu.addItem(update)
+
         let login = NSMenuItem(title: "Start at login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
         login.state = FileManager.default.fileExists(atPath: agentPath) ? .on : .off
         menu.addItem(login)
 
         menu.addItem(.separator())
+        let version = NSMenuItem(title: "peon-ping editor \(installedVersion())", action: nil, keyEquivalent: "")
+        version.isEnabled = false
+        menu.addItem(version)
         let quit = NSMenuItem(title: "Quit PeonBar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
     }
@@ -216,6 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "AssociatedBundleIdentifiers": [Bundle.main.bundleIdentifier ?? "com.peonping.peonbar"],
             "RunAtLoad": true,
             "ProcessType": "Interactive",
+            "AbandonProcessGroup": true,
         ]
         try? FileManager.default.createDirectory(atPath: (agentPath as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
         (plist as NSDictionary).write(toFile: agentPath, atomically: true)
@@ -302,6 +352,111 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             DispatchQueue.main.async { NSWorkspace.shared.open(editorURL) }
         }.resume()
+    }
+
+    // MARK: - Updates
+
+    var availableVersion: String?
+    var updating = false
+
+    func fetchLatestVersion(_ done: @escaping (Result<String, Error>) -> Void) {
+        // The query string skips GitHub's raw-file cache so a fresh push is seen right away
+        let url = URL(string: "https://raw.githubusercontent.com/\(updateRepo)/\(updateRef)/package.json?t=\(Int(Date().timeIntervalSince1970))")!
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        request.setValue("PeonBar", forHTTPHeaderField: "User-Agent")
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard error == nil, code == 200, let data = data,
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let version = obj["version"] as? String else {
+                let reason = error?.localizedDescription ?? "GitHub answered \(code)"
+                DispatchQueue.main.async { done(.failure(NSError(domain: "PeonBar", code: code, userInfo: [NSLocalizedDescriptionKey: reason]))) }
+                return
+            }
+            DispatchQueue.main.async { done(.success(version)) }
+        }.resume()
+    }
+
+    func autoCheck() {
+        let last = defaults.double(forKey: "lastUpdateCheck")
+        guard Date().timeIntervalSince1970 - last > 24 * 3600 else { return }
+        fetchLatestVersion { [weak self] result in
+            guard case .success(let latest) = result else { return }
+            defaults.set(Date().timeIntervalSince1970, forKey: "lastUpdateCheck")
+            self?.availableVersion = isNewer(latest, than: installedVersion()) ? latest : nil
+        }
+    }
+
+    @objc func checkForUpdates() {
+        fetchLatestVersion { [weak self] result in
+            guard let self = self else { return }
+            let current = installedVersion()
+            switch result {
+            case .failure(let error):
+                Self.alert("Could not check for updates", error.localizedDescription)
+            case .success(let latest):
+                defaults.set(Date().timeIntervalSince1970, forKey: "lastUpdateCheck")
+                guard isNewer(latest, than: current) else {
+                    self.availableVersion = nil
+                    Self.alert("You're up to date", "peon-ping editor \(current) is the latest version.")
+                    return
+                }
+                self.availableVersion = latest
+                let alert = NSAlert()
+                alert.messageText = "peon-ping editor \(latest) is available"
+                alert.informativeText = "You have \(current). Updating takes under a minute; PeonBar restarts when it is done."
+                alert.addButton(withTitle: "Update")
+                alert.addButton(withTitle: "Later")
+                NSApp.activate(ignoringOtherApps: true)
+                if alert.runModal() == .alertFirstButtonReturn { self.runUpdate(to: latest) }
+            }
+        }
+    }
+
+    // Runs the same one-line installer people use. It replaces and restarts PeonBar, which ends this process,
+    // so the installer runs in its own process group (set -m) and survives that.
+    func runUpdate(to version: String) {
+        updating = true
+        defaults.set(version, forKey: "pendingUpdate")
+        let log = "\(editorHome)/update.log"
+        try? FileManager.default.createDirectory(atPath: editorHome, withIntermediateDirectories: true)
+        let script = "set -m; (curl -fsSL 'https://raw.githubusercontent.com/\(updateRepo)/\(updateRef)/install.sh' | PEON_EDITOR_REF='\(updateRef)' PEON_EDITOR_REPO='\(updateRepo)' bash) >'\(log)' 2>&1 & wait $!"
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/bash")
+        proc.arguments = ["-c", script]
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = "\(home)/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        proc.environment = env
+        proc.terminationHandler = { [weak self] p in
+            // Only reached if this PeonBar was not replaced: the update failed, or the menu-bar part was skipped
+            DispatchQueue.main.async {
+                self?.updating = false
+                defaults.removeObject(forKey: "pendingUpdate")
+                if p.terminationStatus == 0 {
+                    self?.availableVersion = nil
+                    Self.alert("Updated to \(installedVersion())", "Reopen the editor to use the new version.")
+                } else {
+                    Self.alert("The update failed", "Details are in \(log). You can also run the install command from the README in Terminal.")
+                }
+            }
+        }
+        do {
+            try proc.run()
+        } catch {
+            updating = false
+            Self.alert("The update failed", error.localizedDescription)
+        }
+    }
+
+    // The new PeonBar, started by the installer, confirms the update the old one began
+    func announceFinishedUpdate() {
+        guard let pending = defaults.string(forKey: "pendingUpdate") else { return }
+        defaults.removeObject(forKey: "pendingUpdate")
+        let now = installedVersion()
+        guard !isNewer(pending, than: now) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            Self.alert("peon-ping editor updated to \(now)", "Sounds, packs and settings are unchanged.")
+        }
     }
 
     static func alert(_ title: String, _ text: String) {

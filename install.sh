@@ -158,6 +158,10 @@ install_peonbar() {
   xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
   defaults write com.peonping.peonbar editorLauncher "$LAUNCHER"
   defaults write com.peonping.peonbar peonDir "$PEON_DIR"
+  # For PeonBar → Check for Updates: where to look and what is installed
+  defaults write com.peonping.peonbar repo "$REPO"
+  defaults write com.peonping.peonbar ref "$REF"
+  defaults write com.peonping.peonbar editorHome "$EDITOR_HOME"
 
   # LaunchAgent: start PeonBar at every login. Pointing at the binary (not /usr/bin/open) and naming the bundle
   # makes System Settings → Login Items show "PeonBar" instead of "open".
@@ -172,6 +176,7 @@ install_peonbar() {
   <key>AssociatedBundleIdentifiers</key><array><string>com.peonping.peonbar</string></array>
   <key>RunAtLoad</key><true/>
   <key>ProcessType</key><string>Interactive</string>
+  <key>AbandonProcessGroup</key><true/>
 </dict>
 </plist>
 PLIST

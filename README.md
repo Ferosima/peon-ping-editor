@@ -43,7 +43,7 @@ peon-ping, its settings and your sound edits stay in place.
 | **Quiet** | Stay silent during calls, in macOS Focus / Do Not Disturb, without headphones, or when you are already looking at the agent's tab |
 | **Notifications** | Banner style and theme (Classic, Glass, Sakura, Jarvis), position, how long it stays, title, message templates. The preview matches what peon-ping draws; **Send test** shows the real one. Phone pushes via ntfy, Pushover or Telegram |
 | **Get packs** | Browse and preview the 370+ packs in the peon-ping registry, filter by language, install with one click |
-| **PeonBar** (macOS) | Menu-bar icon: sounds on/off, volume slider, default pack, open the editor, start at login |
+| **PeonBar** (macOS) | Menu-bar icon: sounds on/off, volume slider, default pack, open the editor, start at login, check for updates and update in one click |
 
 | Pack editor | Where |
 |---|---|
