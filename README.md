@@ -1,158 +1,215 @@
-# peon-ping editor — a UI for peon-ping
+<div align="center">
 
-A desktop UI and macOS menu-bar app for [peon-ping](https://github.com/PeonPing/peon-ping), the Warcraft-peon
-(and 370+ other) voice notifications for Claude Code, GitHub Copilot, Cursor, Codex and other AI coding agents.
+# 🔔 peon-ping editor
 
-peon-ping is configured from the terminal. **peon-ping editor** gives it a screen: listen to and edit sound packs,
-pick a different voice for each coding tool, install packs from the registry, style the pop-up notifications, and
-mute or change the volume from the macOS menu bar.
+### The missing UI for [peon-ping](https://github.com/PeonPing/peon-ping)
 
-![My packs](docs/packs.png)
+Pick a voice for every AI coding agent, build your own sound packs, style the pop-ups —<br>
+and mute it all from the macOS menu bar. No terminal, no JSON.
 
-## Install
+[![Release](https://img.shields.io/github/v/release/Ferosima/peon-ping-editor?style=flat-square&color=2f9e5a)](https://github.com/Ferosima/peon-ping-editor/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/Ferosima/peon-ping-editor/ci.yml?branch=main&style=flat-square&label=tests)](https://github.com/Ferosima/peon-ping-editor/actions/workflows/ci.yml)
+![macOS](https://img.shields.io/badge/macOS-12%2B-111?style=flat-square&logo=apple)
+![Node](https://img.shields.io/badge/node-18%2B-3c873a?style=flat-square&logo=node.js&logoColor=white)
+![Dependencies](https://img.shields.io/badge/dependencies-0-blue?style=flat-square)
+[![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](LICENSE)
 
-You need [peon-ping](https://github.com/PeonPing/peon-ping#install) and Node.js 18+. Then one command:
+**[Install](#-install)** · **[Features](#-what-you-can-do)** · **[Screenshots](#-screenshots)** · **[PeonBar](#-peonbar)** · **[FAQ](#-faq)**
+
+<br>
+
+<img src="docs/packs.png" alt="peon-ping editor — My packs" width="880">
+
+</div>
+
+<br>
+
+> **peon-ping** plays game-character voice lines — *"Work work!"*, *"Ready to work?"* — when Claude Code, GitHub
+> Copilot, Cursor, Codex and other agents finish a task or need you. It is configured from the terminal.
+> **peon-ping editor** gives it a proper screen and a menu-bar switch.
+
+## ⚡ Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Ferosima/peon-ping-editor/main/install.sh | bash
 ```
 
-It installs the editor to `~/.peon-editor`, adds a `peon-editor` command, and on macOS puts **PeonBar** in the
-menu bar and starts it at every login. Run the same command again to update.
+That's it. The editor lands in `~/.peon-editor`, you get a `peon-editor` command, and on macOS **PeonBar** appears in
+the menu bar and starts with every login. Open the editor from PeonBar → **Open pack editor…** or run `peon-editor`.
 
-PeonBar is built on your Mac when Xcode or the Command Line Tools are installed; otherwise the installer downloads
-the prebuilt app from the latest release. It shows up as **PeonBar** in System Settings → General → Login Items.
+<table>
+<tr><td><b>Needs</b></td><td><a href="https://github.com/PeonPing/peon-ping#install">peon-ping</a> and Node.js 18+. The installer tells you if either is missing.</td></tr>
+<tr><td><b>Update</b></td><td>PeonBar → <b>Check for Updates…</b>, or run the install command again.</td></tr>
+<tr><td><b>Remove</b></td><td><code>bash ~/.peon-editor/app/uninstall.sh</code> — peon-ping, its settings and your packs stay.</td></tr>
+</table>
 
-Open the editor from PeonBar → **Open pack editor…**, or run `peon-editor`.
-
-Uninstall:
-
-```bash
-bash ~/.peon-editor/app/uninstall.sh
-```
-
-peon-ping, its settings and your sound edits stay in place.
-
-## What you can do
+## ✨ What you can do
 
 | | |
 |---|---|
-| **My packs** | Installed packs, which tools use each one, play a sample, make one the default, remove |
-| **Your own packs** | Create a pack from scratch or copy an existing one, then add sounds from any installed pack or upload your own (WAV, MP3, OGG, M4A, AIFF), rename and remove them |
-| **Pack editor** | Every sound grouped by event (Session start, Task done, Needs your input, …). Turn sounds or whole events on and off, drag sounds to reorder them or drop them into another event, see files that failed to download |
-| **Where** | A different pack per tool (Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, Windsurf, …) and per project folder; silence whole folders |
-| **Quiet** | Stay silent during calls, in macOS Focus / Do Not Disturb, without headphones, or when you are already looking at the agent's tab |
-| **Notifications** | Banner style and theme (Classic, Glass, Sakura, Jarvis), position, how long it stays, title, message templates. The preview matches what peon-ping draws; **Send test** shows the real one. Phone pushes via ntfy, Pushover or Telegram |
-| **Get packs** | Browse and preview the 370+ packs in the peon-ping registry, filter by language, install with one click |
-| **PeonBar** (macOS) | Menu-bar icon: sounds on/off, volume slider, default pack, open the editor, start at login, check for updates and update in one click. Closing a banner stops its sound |
+| 🎧 **Listen & edit packs** | Every sound grouped by event — *Session start, Task done, Needs your input…* Play, switch off, drag to reorder or into another event |
+| 🧩 **Build your own pack** | Start empty or from a copy, pull sounds from any installed pack, upload your own WAV/MP3/OGG/M4A/AIFF |
+| 🛠 **A voice per tool** | GLaDOS for Claude Code, Peon for Copilot, StarCraft for Cursor — and a pack per project folder |
+| 🤫 **Quiet when it matters** | Silent during calls, in macOS Focus, without headphones, or while you are already looking |
+| 💬 **Pop-ups your way** | Classic, Glass, Sakura or Jarvis banners, position, timing, text — with a preview that matches the real thing |
+| 📱 **On your phone** | A push via ntfy, Pushover or Telegram when the agent is done and you've stepped away |
+| 🛒 **370+ packs** | Browse, preview and install from the peon-ping registry, filtered by language |
+| 🍎 **Menu-bar switch** | Mute, volume, default pack and one-click updates; closing a banner stops its sound |
 
-| Pack editor | Where |
-|---|---|
-| ![Pack editor](docs/pack-peon.png) | ![Where: tools and folders](docs/tools.png) |
+Everything stays on your Mac: the editor listens on `127.0.0.1` only and has zero dependencies.
 
-| Notifications | Get packs |
-|---|---|
-| ![Notifications](docs/notifications.png) | ![Get packs](docs/browse.png) |
+## 📸 Screenshots
 
-| Quiet | |
-|---|---|
-| ![Quiet](docs/quiet.png) | |
+<table>
+<tr>
+<td width="50%"><img src="docs/pack-editor.png" alt="Pack editor"><p align="center"><b>Pack editor</b> — play, switch off, drag sounds around</p></td>
+<td width="50%"><img src="docs/tools.png" alt="Where"><p align="center"><b>Where</b> — a pack per tool and per folder</p></td>
+</tr>
+<tr>
+<td><img src="docs/notifications.png" alt="Notifications"><p align="center"><b>Notifications</b> — themes, text and a live preview</p></td>
+<td><img src="docs/browse.png" alt="Get packs"><p align="center"><b>Get packs</b> — 370+ packs, preview before you install</p></td>
+</tr>
+<tr>
+<td><img src="docs/quiet.png" alt="Quiet"><p align="center"><b>Quiet</b> — calls, Focus, headphones</p></td>
+<td></td>
+</tr>
+</table>
 
-Everything runs locally: the server listens on `127.0.0.1` only and has no dependencies.
+## 🍎 PeonBar
 
-## Usage
+A tiny native menu-bar app that comes with the installer (macOS 12+, Apple silicon and Intel).
 
-```
-peon-editor [options]
+- **Sounds on/off** — the peon dims and gets a red slash when muted
+- **Volume** slider that plays a sample when you let go
+- **Default pack**, **Open pack editor…**, **Start at login**
+- **Check for Updates…** — one click, PeonBar restarts on the new version; it also checks once a day
+- **Stops the sound when you close a banner**, so a long line doesn't keep talking
 
-  -p, --port <n>     Port to listen on (default 8787)
-      --pack <name>  Pack to open first
-      --no-open      Do not open the browser
-  -v, --version      Print version
-  -h, --help         Show this help
-```
+It uses peon-ping's own icon from your install — this repo ships no game artwork.
 
-## How it works
+## 🧠 How it works
 
-The editor changes peon-ping through its own CLI wherever one exists, so peon-ping's adapters for other tools
-stay in sync.
+The editor changes peon-ping through its own `peon` commands wherever they exist, so peon-ping's adapters for other
+tools stay in sync. Where peon-ping has no command, it edits the same keys in `config.json` that the official
+`peon-ping-config` skill does.
 
-**Sounds on/off.** `peon sounds enable|disable <event> <file> --pack=<pack>` (writes `disabled_sounds` in
-`config.json`; pack files are not touched).
+<details>
+<summary><b>Sounds, events and moving sounds around</b></summary>
 
-**Moving and reordering sounds.** peon-ping has no setting for this, so the pack's `openpeon.json` is edited:
+- **On/off:** `peon sounds enable|disable <event> <file> --pack=<pack>` (`disabled_sounds`); pack files are not touched.
+- **Whole events:** `categories` in `config.json` (applies to every pack).
+- **Moving and reordering** in downloaded packs edits the pack's `openpeon.json`:
+  - your changes are recorded in `peon-editor-moves.json` next to the peon-ping folder and the untouched manifest is kept as `openpeon.json.orig`;
+  - if `peon update` overwrites the pack, your changes are applied again next time you open it;
+  - packs often reuse one file for several events, so each move remembers where it came from;
+  - when everything is back where it was, the manifest is restored byte-for-byte.
+</details>
 
-- moves and custom order are recorded in `peon-editor-moves.json` next to the peon-ping folder (`~/.claude/hooks/` by default);
-- the untouched manifest is kept as `openpeon.json.orig`;
-- if `peon update` overwrites the pack, your changes are applied again the next time you open it in the editor;
-- each move remembers which event it came from, because packs often reuse one file in several events;
-- a sound cannot be moved into an event that already plays it, and a disabled sound stays disabled after a move;
-- when everything is back where it was, the manifest is restored byte-for-byte and `.orig` is removed.
+<details>
+<summary><b>Your own packs</b></summary>
 
-**Your own packs.** A normal CESP pack in peon-ping's `packs/` folder (`openpeon.json` + `sounds/`), marked with
-`x_peon_editor_custom` so the editor edits it in place. Uploads are checked by content (not just the extension) and
-limited to 5 MB; copied and uploaded files get a `sha256` like registry packs.
+A regular CESP pack in peon-ping's `packs/` folder (`openpeon.json` + `sounds/`), marked `x_peon_editor_custom`, so the
+editor edits it in place. Uploads are checked by their content, not just the extension, and limited to 5 MB; every
+file gets a `sha256` like registry packs.
+</details>
 
-**Stop sound on close.** peon-ping's banners broadcast `com.peonping.dismiss.*` when clicked or closed (not when they
-time out). PeonBar listens and stops the player recorded in `.sound.pid` if it is still `afplay`/`peon-play`.
-Turn it off in Notifications → Behaviour (`x_editor_stop_sound_on_close` in `config.json`).
+<details>
+<summary><b>Tools, folders and quiet modes</b></summary>
 
-**Tools.** `peon packs ide-bind <tool> <pack>`, `ide-unbind` and `packs use` (the `ide_rules` and `default_pack`
-keys).
+- **Tools:** `peon packs ide-bind <tool> <pack>`, `ide-unbind`, `packs use` (`ide_rules`, `default_pack`).
+- **Folders:** `peon packs bind <pack> --pattern <folder>`, `packs unbind --pattern`, `packs exclude add|remove`
+  (`path_rules`, `exclude_dirs`). Suggestions come from the project paths in `~/.claude.json` — only the paths are read.
+- **Order peon-ping uses:** a pack picked for one chat (`/peon-ping-use`) → folders → tools → rotation → default.
+- **Quiet:** `meeting_detect`, `focus_detect` (+ `focus_detect_mode`), `headphones_only`, `suppress_sound_when_tab_focused`.
+</details>
 
-**Folders.** `peon packs bind <pack> --pattern <folder>` / `packs unbind --pattern` (`path_rules`) and
-`peon packs exclude add|remove` (`exclude_dirs`). Folder suggestions come from the project paths in
-`~/.claude.json`; only the paths are read.
+<details>
+<summary><b>Notifications and phone</b></summary>
 
-**Quiet.** `meeting_detect`, `focus_detect` (+ `focus_detect_mode`), `headphones_only` and
-`suppress_sound_when_tab_focused` in `config.json` (peon-ping has no command for them). Focus detection reads
-macOS's Do Not Disturb store, which needs Full Disk Access for the app your agent runs in; without it peon-ping
-keeps playing.
+- On/off goes through `peon notifications on|off`; style, theme, position, timing, title and message templates are
+  written to `config.json`. **Send test** runs `peon notifications test`.
+- peon-ping's installer ships only the classic banner; picking Glass, Sakura or Jarvis downloads
+  `scripts/mac-overlay-<theme>.js` from the peon-ping release that matches your installed version.
+- Phone: `peon mobile ntfy|pushover|telegram …`, `mobile on|off`, `mobile test`. Tokens are stored by peon-ping and
+  never sent back to the browser.
+- **Stop sound on close:** banners broadcast `com.peonping.dismiss.*` when clicked or closed (not when they time out);
+  PeonBar stops the player recorded in `.sound.pid` if it is still `afplay`/`peon-play`.
+</details>
 
-**Phone.** `peon mobile ntfy|pushover|telegram …`, `mobile on|off` and `mobile test`. Tokens are passed to peon-ping
-and stored in its `config.json`; the editor never sends them back to the browser.
+<details>
+<summary><b>Installer, updates and PeonBar</b></summary>
 
-**Installing packs.** The registry is read from `https://peonping.github.io/registry/index.json` (cached for
-10 minutes); installs run `peon packs install <name>`, removals `peon packs remove`.
+- `install.sh` runs entirely from a `main()` function, so a cut-off download does nothing; a failed download keeps the
+  installed version.
+- PeonBar is built locally when Xcode or the Command Line Tools are present, otherwise the universal app is downloaded
+  from the [latest release](https://github.com/Ferosima/peon-ping-editor/releases/latest).
+- It is started at login by `~/Library/LaunchAgents/com.peonping.peonbar.plist` (shown as *PeonBar* in Login Items).
+- **Check for Updates** compares `package.json` on GitHub with the installed one and re-runs the installer in its own
+  process group, so it survives PeonBar being replaced.
+</details>
 
-**Mute, volume, events.** `peon pause|resume` and `peon volume <0..1>`. peon-ping has no command for turning a whole
-event off, so that edits `categories` in `config.json` (it applies to every pack).
+## ⚙️ Configuration
 
-**Notifications.** On/off goes through `peon notifications on|off`; the rest (`notification_style`, `overlay_theme`,
-`notification_position`, `notification_dismiss_seconds`, `notification_all_screens`, `notification_close_button`,
-`notification_stacking`, `notification_title_override`, `notification_title_ide`, `notification_templates`) is
-written to `config.json`. peon-ping's installer only ships the default banner, so picking Glass, Sakura or Jarvis
-downloads `scripts/mac-overlay-<theme>.js` from the peon-ping release that matches your installed version.
-
-**PeonBar.** A small Swift app (`menubar/PeonBar.swift`). The installer builds it if Xcode or the Command Line
-Tools are present, otherwise it downloads the prebuilt universal app from the latest
-[release](../../releases/latest). It is installed to `~/Applications/PeonBar.app` and started at login by
-`~/Library/LaunchAgents/com.peonping.peonbar.plist` (toggle it in the PeonBar menu). Its menu-bar icon, like the editor's
-favicon, is peon-ping's own `docs/peon-icon.png` read from your peon-ping install (dimmed and struck through
-when muted); this repo ships no game artwork.
-
-## Configuration
-
-| Variable | Default | Meaning |
+| Variable | Default | |
 |---|---|---|
 | `PEON_DIR` | `~/.claude/hooks/peon-ping` | peon-ping install dir (`CLAUDE_PEON_DIR` and `CLAUDE_CONFIG_DIR` are honoured too) |
 | `PEON_EDITOR_MOVES` | `<PEON_DIR>/../peon-editor-moves.json` | where moves and custom order are stored |
-| `PEON_BIN` | `peon` from `PATH` | peon CLI; set to an empty string to edit `config.json` directly |
+| `PEON_BIN` | peon-ping's `peon.sh` | peon CLI; an empty string edits `config.json` directly |
 | `PEON_EDITOR_REF` | `main` | branch or tag `install.sh` installs |
 | `PEON_EDITOR_HOME` | `~/.peon-editor` | where `install.sh` puts the app |
-| `PEON_EDITOR_NO_MENUBAR` | unset | `1` makes `install.sh` skip PeonBar (editor only) |
+| `PEON_EDITOR_NO_MENUBAR` | — | `1` skips PeonBar (editor only, e.g. on Linux) |
 
-## Development
+```
+peon-editor [--port 8787] [--pack <name>] [--no-open] [--version] [--help]
+```
+
+## ❓ FAQ
+
+<details>
+<summary><b>Does it send anything anywhere?</b></summary>
+
+No. The editor talks only to peon-ping on your Mac. It reaches the internet only when you ask it to: browsing or
+installing packs (peon-ping's registry and GitHub), downloading a banner theme, checking for updates, or sending a
+phone push through the service you set up.
+</details>
+
+<details>
+<summary><b>Why does "In Focus / Do Not Disturb" need Full Disk Access?</b></summary>
+
+macOS keeps the Focus state in a protected file. The app your agent runs in (Terminal, iTerm, Cursor, VS Code…) needs
+Full Disk Access for peon-ping to read it. Without it nothing breaks — peon-ping just keeps playing.
+</details>
+
+<details>
+<summary><b>Will a peon-ping update wipe my changes?</b></summary>
+
+No. Your own packs are separate folders that peon-ping leaves alone. Switched-off sounds live in peon-ping's
+settings, and moved or reordered sounds in downloaded packs are re-applied the next time you open the pack in the editor.
+</details>
+
+<details>
+<summary><b>Linux? Windows?</b></summary>
+
+The editor runs anywhere peon-ping and Node 18+ do (`PEON_EDITOR_NO_MENUBAR=1` on Linux). PeonBar and banner themes
+are macOS-only. Windows isn't supported yet.
+</details>
+
+## 🧑‍💻 Development
 
 ```bash
 git clone https://github.com/Ferosima/peon-ping-editor && cd peon-ping-editor
-npm start                 # run from the checkout
-npm test                  # node:test, no dependencies
-bash install.sh           # install this checkout instead of downloading
+npm start          # run the editor from the checkout
+npm test           # node:test, no dependencies
+bash install.sh    # install this checkout instead of downloading
 ```
 
-Releases: push a `v*` tag and GitHub Actions publishes a release with a universal `PeonBar.zip`.
+**Releasing:** bump `version` in `package.json`, tag `vX.Y.Z` and push — GitHub Actions runs the tests and publishes a
+release with a universal `PeonBar.zip`. PeonBar's update check picks up the new version.
 
----
+Issues and pull requests are welcome.
 
-Not affiliated with PeonPing. peon-ping and its sound packs belong to their authors.
+## 📄 License
+
+[MIT](LICENSE) © Serhii Husachenko
+
+<sub>Not affiliated with PeonPing. peon-ping, its sound packs and their characters belong to their respective owners.</sub>

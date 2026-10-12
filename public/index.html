@@ -804,7 +804,8 @@ function renderSound(p, cat, s) {
 
   const play = playBtn(() => localSrc(p.name, s.path));
   if (s.missing) play.disabled = true;
-  row.append(
+  // DOM append() would print a null as the text "null", so drop the buttons own packs do not get
+  row.append(...[
     el('span', { className: 'grip', textContent: '⋮⋮', title: 'Drag to another event' }),
     play,
     el('div', { className: 'info' }, el('div', { className: 'label', textContent: s.label || s.file }), el('div', { className: 'file' }, el('span', { className: 'mono', textContent: s.file }), chips.length ? ' ' : '', ...chips.flatMap((c) => [c, ' ']))),
@@ -821,7 +822,7 @@ function renderSound(p, cat, s) {
       const ok = done(await post('/api/toggle', { pack: p.name, category: cat.name, file: s.file, enabled: input.checked }));
       input.disabled = false;
       if (ok) { s.enabled = input.checked; route(); } else input.checked = !input.checked;
-    }, (s.enabled ? 'Disable ' : 'Enable ') + s.file));
+    }, (s.enabled ? 'Disable ' : 'Enable ') + s.file)].filter(Boolean));
 
   row.addEventListener('dragstart', (e) => {
     drag = { sound: s, from: cat.name };
@@ -939,7 +940,7 @@ async function viewBrowse() {
     chipBox.replaceChildren(
       el('button', { className: browse.lang ? '' : 'on', textContent: 'All languages', onclick: () => setLang('') }),
       ...top.map((l) => el('button', { className: browse.lang === l ? 'on' : '', textContent: l + ' ' + counts[l], onclick: () => setLang(l) })),
-      rest.length ? other : null);
+      ...(rest.length ? [other] : []));
   };
 
   const renderList = () => {
