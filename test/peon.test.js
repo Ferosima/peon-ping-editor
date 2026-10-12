@@ -266,3 +266,46 @@ test('writes through a symlinked config.json', () => {
   assert.equal(fs.lstatSync(cfgPath).isSymbolicLink(), true);
   assert.equal(config().volume, 0.3);
 });
+
+test('quiet settings: read, write, validate', () => {
+  const { peon, config } = setup();
+  assert.deepEqual(peon.quiet(), { meeting_detect: false, focus_detect: false, headphones_only: false, suppress_sound_when_tab_focused: false, focus_detect_mode: 'all' });
+  assert.equal(peon.setQuiet({ meeting_detect: true, headphones_only: true, focus_detect_mode: 'sound' }).ok, true);
+  assert.equal(config().meeting_detect, true);
+  assert.equal(peon.quiet().focus_detect_mode, 'sound');
+  assert.equal(peon.setQuiet({ meeting_detect: 'yes' }).ok, false);
+  assert.equal(peon.setQuiet({ focus_detect_mode: 'loud' }).ok, false);
+  assert.equal(peon.setQuiet({ volume: 1 }).ok, false);
+});
+
+test('folder rules and silenced folders', () => {
+  const { peon, config } = setup();
+  assert.equal(peon.bindFolder('~/work/api', 'demo').ok, true);
+  assert.equal(peon.bindFolder('~/work/api', 'demo').ok, true); // rebinding replaces, no duplicate
+  assert.deepEqual(config().path_rules, [{ pattern: '~/work/api', pack: 'demo' }]);
+  assert.equal(peon.bindFolder('~/x', 'nope').ok, false);
+  assert.equal(peon.bindFolder('  ', 'demo').ok, false);
+  assert.equal(peon.bindFolder('a\nb', 'demo').ok, false);
+  assert.equal(peon.unbindFolder('~/work/api').ok, true);
+  assert.deepEqual(config().path_rules, []);
+
+  assert.equal(peon.silenceFolder('~/Downloads', true).ok, true);
+  assert.deepEqual(peon.folders().silenced, ['~/Downloads']);
+  assert.equal(peon.silenceFolder('~/Downloads', false).ok, true);
+  assert.deepEqual(peon.folders().silenced, []);
+  assert.ok(Array.isArray(peon.folders().suggestions));
+});
+
+test('phone notifications never expose secrets', async () => {
+  const { peon, config } = setup();
+  const cfg = config();
+  cfg.mobile_notify = { enabled: true, service: 'pushover', user_key: 'uabcdefghijklmnop', app_token: 'secret-app-token' };
+  fs.writeFileSync(peon.paths.configPath, JSON.stringify(cfg));
+  const m = peon.mobile();
+  assert.equal(m.service, 'pushover');
+  assert.equal(m.pushover.user_key, 'uabc…');
+  assert.ok(!JSON.stringify(m).includes('secret-app-token'));
+  assert.ok(!JSON.stringify(m).includes('uabcdefghijklmnop'));
+  // No peon.sh in the fixture: set-up is refused rather than half-written
+  assert.equal((await peon.setMobile({ service: 'ntfy', topic: 'abc' })).ok, false);
+});

@@ -662,6 +662,169 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
     return runAsync(peonBin, ['notifications', 'test'], { timeout: 20000 });
   }
 
+  // ---- Quiet: when peon-ping keeps sounds to itself ------------------------------------------
+  const QUIET_BOOLS = ['meeting_detect', 'focus_detect', 'headphones_only', 'suppress_sound_when_tab_focused'];
+  const FOCUS_MODES = ['all', 'sound', 'notifications'];
+
+  function quiet() {
+    const cfg = loadConfig();
+    const out = Object.fromEntries(QUIET_BOOLS.map((k) => [k, String(cfg[k]).toLowerCase() === 'true']));
+    out.focus_detect_mode = FOCUS_MODES.includes(cfg.focus_detect_mode) ? cfg.focus_detect_mode : 'all';
+    return out;
+  }
+
+  // peon-ping has no CLI for these keys, so they are written to config.json like the peon-ping-config skill does
+  function setQuiet(patch) {
+    const cfg = loadConfig();
+    for (const [key, value] of Object.entries(patch || {})) {
+      if (QUIET_BOOLS.includes(key)) {
+        if (typeof value !== 'boolean') return { ok: false, message: `${key} must be true or false` };
+        cfg[key] = value;
+      } else if (key === 'focus_detect_mode') {
+        if (!FOCUS_MODES.includes(value)) return { ok: false, message: `Unknown focus mode "${value}"` };
+        cfg[key] = value;
+      } else {
+        return { ok: false, message: `Unknown setting "${key}"` };
+      }
+    }
+    writeJson(configPath, cfg);
+    return { ok: true, message: 'Saved' };
+  }
+
+  // ---- Folders: a pack per project, or silence ---------------------------------------------
+  function cleanPattern(value) {
+    const pattern = String(value ?? '').trim();
+    if (!pattern || pattern.length > 300 || /[\n\r\0]/.test(pattern)) return null;
+    return pattern;
+  }
+
+  // Projects Claude Code has opened (paths only), to suggest instead of typing them
+  function projectSuggestions() {
+    const home = os.homedir();
+    const seen = new Set();
+    const claudeJson = readJson(path.join(home, '.claude.json'), {}) || {};
+    const candidates = [
+      ...Object.keys(claudeJson.projects || {}),
+      ((readJson(path.join(paths.peonDir, '.state.json'), {}) || {}).last_active || {}).cwd,
+    ];
+    for (const dir of candidates) {
+      if (typeof dir !== 'string' || !dir.startsWith('/') || dir === home || dir.includes('/.claude/worktrees/')) continue;
+      if (fs.existsSync(dir)) seen.add(dir.startsWith(home + path.sep) ? '~' + dir.slice(home.length) : dir);
+    }
+    return [...seen].sort();
+  }
+
+  function folders() {
+    const cfg = loadConfig();
+    return {
+      rules: (cfg.path_rules || []).filter((r) => r && r.pattern).map((r) => ({ pattern: String(r.pattern), pack: String(r.pack || '') })),
+      silenced: (cfg.exclude_dirs || []).filter((p) => typeof p === 'string'),
+      suggestions: projectSuggestions(),
+    };
+  }
+
+  function bindFolder(value, pack) {
+    const pattern = cleanPattern(value);
+    if (!pattern) return { ok: false, message: 'Enter a folder path or pattern' };
+    if (!installedPacks().includes(pack)) return { ok: false, message: `Pack "${pack}" is not installed` };
+    if (peonBin) return runPeon(['packs', 'bind', pack, '--pattern', pattern]);
+    const cfg = loadConfig();
+    const rules = (cfg.path_rules || []).filter((r) => r.pattern !== pattern);
+    rules.push({ pattern, pack });
+    cfg.path_rules = rules;
+    writeJson(configPath, cfg);
+    return { ok: true, message: `${pattern} → ${pack}` };
+  }
+
+  function unbindFolder(value) {
+    const pattern = cleanPattern(value);
+    if (!pattern) return { ok: false, message: 'Missing folder' };
+    if (peonBin) return runPeon(['packs', 'unbind', '--pattern', pattern]);
+    const cfg = loadConfig();
+    cfg.path_rules = (cfg.path_rules || []).filter((r) => r.pattern !== pattern);
+    writeJson(configPath, cfg);
+    return { ok: true, message: `removed ${pattern}` };
+  }
+
+  function silenceFolder(value, silenced) {
+    const pattern = cleanPattern(value);
+    if (!pattern) return { ok: false, message: 'Enter a folder path or pattern' };
+    if (peonBin) return runPeon(['packs', 'exclude', silenced ? 'add' : 'remove', pattern]);
+    const cfg = loadConfig();
+    const dirs = (cfg.exclude_dirs || []).filter((p) => p !== pattern);
+    if (silenced) dirs.push(pattern);
+    cfg.exclude_dirs = dirs;
+    writeJson(configPath, cfg);
+    return { ok: true, message: silenced ? `silenced ${pattern}` : `unsilenced ${pattern}` };
+  }
+
+  // ---- Phone: ntfy / Pushover / Telegram ---------------------------------------------------
+  const NTFY_PRIORITIES = ['', 'max', 'urgent', 'high', 'default', 'low', 'min'];
+  const mask = (v) => (v ? `${String(v).slice(0, 4)}…` : '');
+
+  // Secrets never leave the server: tokens are reported as set or not, ids are masked
+  function mobile() {
+    const mn = loadConfig().mobile_notify || {};
+    return {
+      service: ['ntfy', 'pushover', 'telegram'].includes(mn.service) ? mn.service : '',
+      enabled: Boolean(mn.service) && mn.enabled !== false,
+      ntfy: { topic: mn.service === 'ntfy' ? String(mn.topic || '') : '', server: String(mn.server || 'https://ntfy.sh'), priority: String(mn.priority || ''), token_set: Boolean(mn.token) },
+      pushover: { user_key: mn.service === 'pushover' ? mask(mn.user_key) : '' },
+      telegram: { chat_id: mn.service === 'telegram' ? mask(mn.chat_id) : '' },
+    };
+  }
+
+  function field(value, name, { max = 200, optional = false } = {}) {
+    const v = String(value ?? '').trim();
+    if (!v && optional) return { v: '' };
+    if (!v) return { error: `${name} is required` };
+    if (v.length > max || /\s/.test(v)) return { error: `${name} looks wrong (no spaces, up to ${max} characters)` };
+    return { v };
+  }
+
+  async function setMobile(p = {}) {
+    if (!peonBin) return { ok: false, message: 'Phone notifications need peon.sh from peon-ping' };
+    let args;
+    if (p.service === 'ntfy') {
+      const topic = field(p.topic, 'Topic', { max: 64 });
+      const server = field(p.server, 'Server', { optional: true });
+      const token = field(p.token, 'Token', { optional: true });
+      const err = topic.error || server.error || token.error;
+      if (err) return { ok: false, message: err };
+      if (server.v && !/^https?:\/\//.test(server.v)) return { ok: false, message: 'Server must start with https://' };
+      if (!NTFY_PRIORITIES.includes(String(p.priority || ''))) return { ok: false, message: 'Unknown priority' };
+      args = ['mobile', 'ntfy', topic.v];
+      if (server.v) args.push(`--server=${server.v}`);
+      if (token.v) args.push(`--token=${token.v}`);
+      if (p.priority) args.push(`--priority=${p.priority}`);
+    } else if (p.service === 'pushover') {
+      const user = field(p.user_key, 'User key', { max: 64 });
+      const token = field(p.app_token, 'App token', { max: 64 });
+      if (user.error || token.error) return { ok: false, message: user.error || token.error };
+      args = ['mobile', 'pushover', user.v, token.v];
+    } else if (p.service === 'telegram') {
+      const bot = field(p.bot_token, 'Bot token', { max: 100 });
+      const chat = field(p.chat_id, 'Chat id', { max: 32 });
+      if (bot.error || chat.error) return { ok: false, message: bot.error || chat.error };
+      args = ['mobile', 'telegram', bot.v, chat.v];
+    } else {
+      return { ok: false, message: 'Pick ntfy, Pushover or Telegram' };
+    }
+    // Setting up sends a test push, which can take a few seconds
+    const result = await runAsync(peonBin, args, { timeout: 30000 });
+    return { ok: result.ok, message: result.ok ? 'Phone notifications set up — check your phone for a test' : result.message };
+  }
+
+  function setMobileEnabled(on) {
+    if (!peonBin) return { ok: false, message: 'Phone notifications need peon.sh from peon-ping' };
+    return runPeon(['mobile', on ? 'on' : 'off']);
+  }
+
+  async function testMobile() {
+    if (!peonBin) return { ok: false, message: 'Phone notifications need peon.sh from peon-ping' };
+    return runAsync(peonBin, ['mobile', 'test'], { timeout: 30000 });
+  }
+
   let registryCache = null;
 
   async function loadRegistry(force = false) {
@@ -735,6 +898,16 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
     notifications,
     setNotifications,
     testNotification,
+    quiet,
+    setQuiet,
+    folders,
+    bindFolder,
+    unbindFolder,
+    silenceFolder,
+    mobile,
+    setMobile,
+    setMobileEnabled,
+    testMobile,
     setSoundsOn,
     setVolume,
     setEvent,

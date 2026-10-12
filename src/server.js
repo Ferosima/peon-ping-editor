@@ -66,6 +66,12 @@ function createServer({ peon = createPeon() } = {}) {
       return;
     }
 
+    const reads = { '/api/quiet': () => peon.quiet(), '/api/folders': () => peon.folders(), '/api/mobile': () => peon.mobile() };
+    if (req.method === 'GET' && reads[url.pathname]) {
+      sendJson(res, 200, reads[url.pathname]());
+      return;
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/notifications') {
       sendJson(res, 200, peon.notifications());
       return;
@@ -128,6 +134,13 @@ function createServer({ peon = createPeon() } = {}) {
       '/api/event': (p) => peon.setEvent(str(p.category), Boolean(p.enabled)),
       '/api/notifications': (p) => peon.setNotifications(p),
       '/api/notifications/test': () => peon.testNotification(),
+      '/api/quiet': (p) => peon.setQuiet(p),
+      '/api/folders/bind': (p) => peon.bindFolder(p.pattern, str(p.pack)),
+      '/api/folders/unbind': (p) => peon.unbindFolder(p.pattern),
+      '/api/folders/silence': (p) => peon.silenceFolder(p.pattern, Boolean(p.silenced)),
+      '/api/mobile': (p) => peon.setMobile(p),
+      '/api/mobile/enabled': (p) => peon.setMobileEnabled(Boolean(p.on)),
+      '/api/mobile/test': () => peon.testMobile(),
       '/api/install': (p) => peon.installPack(str(p.pack)),
       '/api/remove': (p) => peon.removePack(str(p.pack)),
     };

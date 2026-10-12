@@ -61,7 +61,7 @@
   .chip { display:inline-flex; align-items:center; gap:4px; padding:1px 8px; border-radius:999px; background:var(--chip); color:var(--chip-text); font-size:12px; white-space:nowrap; }
   .chip.accent { background:var(--accent-soft); color:var(--accent); font-weight:600; }
   .chips { display:flex; gap:6px; flex-wrap:wrap; }
-  select, input[type=search], input[type=text] { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:6px 10px; min-width:0; }
+  select, input[type=search], input[type=text], input[type=password] { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:6px 10px; min-width:0; }
 
   .play { width:32px; height:32px; flex:none; border-radius:50%; border:1px solid var(--line); background:var(--surface); display:inline-flex; align-items:center; justify-content:center; font-size:11px; padding:0; }
   .play:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
@@ -96,6 +96,27 @@
   .tool.default { background:var(--surface-2); border-radius:12px 12px 0 0; }
   .seen { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--accent); margin-left:6px; vertical-align:middle; }
   .note { margin-top:12px; font-size:12px; color:var(--dim); }
+  .note a { color:var(--accent); }
+
+  .section-title { margin:28px 0 4px; font-size:16px; }
+  .section-sub { margin:0 0 10px; color:var(--dim); font-size:13px; }
+  .add-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:12px 14px; }
+  .add-row input { flex:1 1 240px; }
+  .add-row select { flex:0 1 220px; }
+  .empty-row { padding:12px 14px; color:var(--dim); font-size:13px; }
+  .q-row { display:flex; gap:14px; align-items:flex-start; padding:14px; }
+  .q-row .txt { flex:1; min-width:0; }
+  .q-row .t { font-weight:600; }
+  .q-row .d { color:var(--dim); font-size:13px; margin-top:2px; }
+  .q-row .extra { margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .q-row a { color:var(--accent); }
+  .phone { margin-top:16px; }
+  .phone .fields { display:grid; gap:8px; margin-top:10px; }
+  .phone .fields label { font-size:12px; color:var(--dim); display:block; margin-bottom:2px; }
+  .phone .fields input, .phone .fields select { width:100%; }
+  .phone .help { font-size:12px; color:var(--dim); margin:8px 0 0; }
+  .phone .help a { color:var(--accent); }
+  .phone .actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
 
   /* editor */
   .toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
@@ -248,7 +269,8 @@
     <div class="brand"><img src="/favicon.png" alt="" width="22" height="22" onerror="this.remove()">peon-editor</div>
     <nav id="nav">
       <a href="#/packs" data-tab="packs">My packs</a>
-      <a href="#/tools" data-tab="tools">Tools</a>
+      <a href="#/tools" data-tab="tools">Where</a>
+      <a href="#/quiet" data-tab="quiet">Quiet</a>
       <a href="#/notifications" data-tab="notifications">Notifications</a>
       <a href="#/browse" data-tab="browse">Get packs</a>
     </nav>
@@ -429,8 +451,9 @@ function viewPacks() {
   ];
 }
 
-function viewTools() {
+async function viewTools() {
   setTab('tools');
+  const f = await getJson('/api/folders');
   const t = store.tools;
   const packOptions = (selected, withDefault) => {
     const sel = el('select');
@@ -467,12 +490,86 @@ function viewTools() {
     rows.push(el('div', { className: 'tool' }, el('div', { className: 'who' }, el('div', { className: 't dim', textContent: 'Another tool' })), sel, add));
   }
 
+  // ---- folders ----
+  const datalist = el('datalist', { id: 'projectDirs' }, f.suggestions.map((d) => el('option', { value: d })));
+  const folderInput = (placeholder) => {
+    const input = el('input', { type: 'text', placeholder, spellcheck: false, autocomplete: 'off' });
+    input.setAttribute('list', 'projectDirs');
+    return input;
+  };
+  const folderRows = f.rules.map((r) => {
+    const sel = packOptions(r.pack, false);
+    sel.setAttribute('aria-label', 'Pack for ' + r.pattern);
+    sel.onchange = async () => { if (done(await post('/api/folders/bind', { pattern: r.pattern, pack: sel.value }), r.pattern + ' → ' + packTitle(sel.value))) await refreshCore(); route(); };
+    return el('div', { className: 'tool' },
+      el('div', { className: 'who' }, el('div', { className: 't mono', textContent: r.pattern })),
+      playBtn(() => sampleOf(sel.value), 'Play a sample'), sel,
+      el('button', { className: 'btn sm ghost danger', textContent: 'Remove', onclick: async () => { if (done(await post('/api/folders/unbind', { pattern: r.pattern }), 'Removed ' + r.pattern)) await refreshCore(); route(); } }));
+  });
+  if (!folderRows.length) folderRows.push(el('div', { className: 'empty-row', textContent: 'No folder rules yet.' }));
+  const newFolder = folderInput('Folder, e.g. ~/work/api or ~/work/*');
+  const newFolderPack = packOptions(t.default_pack, false);
+  folderRows.push(el('div', { className: 'add-row' }, newFolder, newFolderPack, el('button', { className: 'btn', textContent: 'Add', onclick: async () => {
+    if (done(await post('/api/folders/bind', { pattern: newFolder.value, pack: newFolderPack.value }), newFolder.value + ' → ' + packTitle(newFolderPack.value))) { await refreshCore(); route(); }
+  } })));
+
+  const silentRows = f.silenced.map((pattern) => el('div', { className: 'tool' },
+    el('div', { className: 'who' }, el('div', { className: 't mono', textContent: pattern })),
+    el('button', { className: 'btn sm', textContent: 'Unsilence', onclick: async () => { done(await post('/api/folders/silence', { pattern, silenced: false }), pattern + ' plays sounds again'); route(); } })));
+  if (!silentRows.length) silentRows.push(el('div', { className: 'empty-row', textContent: 'Nothing silenced.' }));
+  const newSilent = folderInput('Folder to keep quiet, e.g. ~/Downloads');
+  silentRows.push(el('div', { className: 'add-row' }, newSilent, el('button', { className: 'btn', textContent: 'Silence', onclick: async () => {
+    if (done(await post('/api/folders/silence', { pattern: newSilent.value, silenced: true }), newSilent.value + ' silenced')) route();
+  } })));
+
   return [
-    el('div', { className: 'page-head' }, el('div', {}, el('h1', { textContent: 'Which pack plays where' }), el('p', { textContent: 'Give each coding tool its own voice. A green dot means peon-ping has heard from that tool recently.' }))),
+    el('div', { className: 'page-head' }, el('div', {}, el('h1', { textContent: 'Which pack plays where' }), el('p', { textContent: 'Give each coding tool and each project its own voice.' }))),
+    el('h2', { className: 'section-title', textContent: 'Tools' }),
+    el('p', { className: 'section-sub', textContent: 'A green dot means peon-ping has heard from that tool recently.' }),
     el('div', { className: 'card rows' }, rows),
-    el('p', { className: 'note', textContent: 'Order peon-ping uses: a pack picked for one chat (/peon-ping-use) → folder rules → this tool list → rotation → default pack.' }),
+    el('h2', { className: 'section-title', textContent: 'Folders' }),
+    el('p', { className: 'section-sub', textContent: 'A pack for one project, wherever you open it. A folder covers everything inside it; * matches any name. Folder rules win over tool picks; the first matching rule is used.' }),
+    el('div', { className: 'card rows' }, folderRows),
+    el('h2', { className: 'section-title', textContent: 'Silent folders' }),
+    el('p', { className: 'section-sub', textContent: 'No sounds and no pop-ups for agents working in these folders.' }),
+    el('div', { className: 'card rows' }, silentRows),
+    datalist,
+    el('p', { className: 'note', textContent: 'Order peon-ping uses: a pack picked for one chat (/peon-ping-use) → folders → tools → rotation → default pack.' }),
   ];
 }
+
+/* ---------- quiet ---------- */
+async function viewQuiet() {
+  setTab('quiet');
+  const q = await getJson('/api/quiet');
+  const save = async (patch, msg) => { const ok = done(await post('/api/quiet', patch), msg); if (ok) Object.assign(q, patch); return ok; };
+  const row = (key, title, desc, extra) => el('div', { className: 'q-row' },
+    switchEl(q[key], async (input) => { input.disabled = true; if (!(await save({ [key]: input.checked }, title + (input.checked ? ' on' : ' off')))) input.checked = !input.checked; input.disabled = false; }, title),
+    el('div', { className: 'txt' }, el('div', { className: 't', textContent: title }), el('div', { className: 'd' }, desc), extra || null));
+
+  const mode = el('select', { onchange: () => save({ focus_detect_mode: mode.value }, 'Saved') },
+    el('option', { value: 'all', textContent: 'Mute sounds and pop-ups' }),
+    el('option', { value: 'sound', textContent: 'Mute sounds only' }),
+    el('option', { value: 'notifications', textContent: 'Hide pop-ups only' }));
+  mode.value = q.focus_detect_mode;
+  const focusExtra = el('div', {},
+    el('div', { className: 'extra' }, el('span', { className: 'small dim', textContent: 'When a Focus is on:' }), mode),
+    el('div', { className: 'd', style: 'margin-top:8px' },
+      'macOS keeps Focus state in a protected file, so the app your agent runs in (Terminal, iTerm, Cursor, VS Code…) needs ',
+      el('a', { href: 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles', textContent: 'Full Disk Access' }),
+      '. Without it peon-ping cannot see Focus and simply keeps playing.'));
+
+  return [
+    el('div', { className: 'page-head' }, el('div', {}, el('h1', { textContent: 'Quiet' }), el('p', { textContent: 'When peon-ping should keep it down. Mute everything at once with the switch at the top.' }))),
+    el('div', { className: 'card rows' },
+      row('meeting_detect', 'During calls', 'Stay silent while a call is using your microphone: Zoom, Meet, Teams, Slack huddles, FaceTime.'),
+      row('focus_detect', 'In Focus / Do Not Disturb', 'Respect the macOS Focus modes.', focusExtra),
+      row('headphones_only', 'Only with headphones', 'Play sounds only when headphones or AirPods are connected — nothing from the laptop speakers.'),
+      row('suppress_sound_when_tab_focused', 'Not when I’m watching', 'Skip the sound when the terminal tab the agent runs in is already in front of you.')),
+    el('p', { className: 'note' }, 'Want silence in one project only? Use ', el('a', { href: '#/tools', textContent: 'Where → Silent folders' }), '.'),
+  ];
+}
+
 
 async function viewPack(name) {
   setTab('packs');
@@ -892,13 +989,86 @@ async function viewNotifications() {
     test.disabled = false;
   } });
 
+  // Load the phone card first: the preview draws into the page once it is on screen
+  const phone = await phoneCard();
   setTimeout(renderNotifPreview);
   return [
     el('div', { className: 'page-head' },
       el('div', {}, el('h1', { textContent: 'Notifications' }), el('p', { textContent: 'How peon-ping’s pop-ups look. Changes save as you go.' })),
       el('div', { className: 'actions', style: 'align-items:center;gap:16px' }, enabled, test)),
-    el('div', { className: 'notif' + (n.enabled ? '' : ' disabled') }, settings, el('div', { className: 'preview-col' }, preview)),
+    el('div', { className: 'notif' + (n.enabled ? '' : ' disabled') }, el('div', {}, settings, phone), el('div', { className: 'preview-col' }, preview)),
   ];
+}
+
+/* ---------- phone ---------- */
+const PHONE_HELP = {
+  ntfy: ['Free, no account. Install the ntfy app (iOS/Android), tap +, and subscribe to the same topic. Anyone who knows the topic can read it, so keep it hard to guess.', 'https://ntfy.sh'],
+  pushover: ['Paid app ($5 once). Your user key is on the Pushover dashboard; create an application there for the app token.', 'https://pushover.net'],
+  telegram: ['Create a bot with @BotFather to get its token, send the bot any message, then get your chat id from @userinfobot.', 'https://core.telegram.org/bots#how-do-i-create-a-bot'],
+};
+
+async function phoneCard() {
+  const m = await getJson('/api/mobile');
+  const card = el('div', { className: 'card group phone' }, el('h3', { textContent: 'On your phone' }));
+  const editing = { open: !m.service };
+
+  const render = () => {
+    card.replaceChildren(el('h3', { textContent: 'On your phone' }));
+    card.append(el('p', { className: 'small dim', style: 'margin:0', textContent: 'A push when the agent finishes, needs permission or asks a question — handy when you step away. Not sent while sounds are muted.' }));
+    if (m.service && !editing.open) {
+      const where = m.service === 'ntfy' ? 'ntfy topic “' + m.ntfy.topic + '”' : m.service === 'pushover' ? 'Pushover (' + m.pushover.user_key + ')' : 'Telegram chat ' + m.telegram.chat_id;
+      const sw = switchEl(m.enabled, async (input) => {
+        input.disabled = true;
+        if (done(await post('/api/mobile/enabled', { on: input.checked }), input.checked ? 'Phone pushes on' : 'Phone pushes off')) m.enabled = input.checked; else input.checked = !input.checked;
+        input.disabled = false;
+      }, 'Phone notifications');
+      const test = el('button', { className: 'btn', textContent: 'Send test', onclick: async () => { test.disabled = true; done(await post('/api/mobile/test', {}), 'Test push sent'); test.disabled = false; } });
+      card.append(el('div', { className: 'field' }, sw, el('span', { textContent: 'Sending to ' + where })),
+        el('div', { className: 'actions' }, test, el('button', { className: 'btn ghost', textContent: 'Change…', onclick: () => { editing.open = true; render(); } })));
+      return;
+    }
+    let service = m.service || 'ntfy';
+    const box = el('div');
+    const draw = () => {
+      const input = (name, label, props = {}) => {
+        const i = el('input', { name, type: 'text', spellcheck: false, autocomplete: 'off', ...props });
+        return el('div', {}, el('label', { textContent: label }), i);
+      };
+      const fields = el('div', { className: 'fields' });
+      if (service === 'ntfy') {
+        const topic = input('topic', 'Topic', { value: m.ntfy.topic || 'peon-' + Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 10) });
+        const prio = el('select', { name: 'priority' }, ['', 'max', 'high', 'default', 'low'].map((v) => el('option', { value: v, textContent: v ? v : 'By event (default)' })));
+        prio.value = m.ntfy.priority;
+        fields.append(topic, input('server', 'Server (optional)', { placeholder: 'https://ntfy.sh', value: m.ntfy.server !== 'https://ntfy.sh' ? m.ntfy.server : '' }),
+          input('token', 'Access token (optional, for private servers)', { type: 'password' }), el('div', {}, el('label', { textContent: 'Priority' }), prio));
+      } else if (service === 'pushover') {
+        fields.append(input('user_key', 'User key', { type: 'password' }), input('app_token', 'App token', { type: 'password' }));
+      } else {
+        fields.append(input('bot_token', 'Bot token', { type: 'password' }), input('chat_id', 'Chat id'));
+      }
+      const [help, link] = PHONE_HELP[service];
+      const save = el('button', { className: 'btn primary', textContent: 'Save and send a test', onclick: async () => {
+        const body = { service };
+        fields.querySelectorAll('[name]').forEach((f) => (body[f.name] = f.value));
+        save.disabled = true;
+        save.textContent = 'Sending…';
+        const data = await post('/api/mobile', body);
+        save.disabled = false;
+        save.textContent = 'Save and send a test';
+        if (done(data, data.message)) { Object.assign(m, await getJson('/api/mobile')); editing.open = false; render(); }
+      } });
+      box.replaceChildren(
+        el('div', { className: 'field' }, el('span', { className: 'lbl', textContent: 'Service' }),
+          el('div', { className: 'seg' }, ['ntfy', 'pushover', 'telegram'].map((v) => el('button', { className: v === service ? 'on' : '', textContent: v === 'ntfy' ? 'ntfy' : v === 'pushover' ? 'Pushover' : 'Telegram', onclick: () => { service = v; draw(); } })))),
+        fields,
+        el('p', { className: 'help' }, help + ' ', el('a', { href: link, target: '_blank', rel: 'noopener', textContent: 'More' })),
+        el('div', { className: 'actions' }, save, m.service ? el('button', { className: 'btn ghost', textContent: 'Cancel', onclick: () => { editing.open = false; render(); } }) : null));
+    };
+    draw();
+    card.append(box);
+  };
+  render();
+  return card;
 }
 
 function renderNotifPreview() {
@@ -1097,7 +1267,8 @@ async function route() {
   try {
     let nodes;
     if (hash.startsWith('#/pack/')) nodes = await viewPack(decodeURIComponent(hash.slice(7)));
-    else if (hash.startsWith('#/tools')) nodes = viewTools();
+    else if (hash.startsWith('#/tools')) nodes = await viewTools();
+    else if (hash.startsWith('#/quiet')) nodes = await viewQuiet();
     else if (hash.startsWith('#/browse')) nodes = await viewBrowse();
     else if (hash.startsWith('#/notifications')) nodes = await viewNotifications();
     else nodes = viewPacks();

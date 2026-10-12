@@ -39,18 +39,23 @@ peon-ping, its settings and your sound edits stay in place.
 |---|---|
 | **My packs** | Installed packs, which tools use each one, play a sample, make one the default, remove |
 | **Pack editor** | Every sound grouped by event (Session start, Task done, Needs your input, …). Turn sounds or whole events on and off, drag sounds to reorder them or drop them into another event, see files that failed to download |
-| **Tools** | A different pack per tool: Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, Windsurf, … |
-| **Notifications** | Banner style and theme (Classic, Glass, Sakura, Jarvis), position, how long it stays, title, message templates. The preview matches what peon-ping draws; **Send test** shows the real one |
+| **Where** | A different pack per tool (Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, Windsurf, …) and per project folder; silence whole folders |
+| **Quiet** | Stay silent during calls, in macOS Focus / Do Not Disturb, without headphones, or when you are already looking at the agent's tab |
+| **Notifications** | Banner style and theme (Classic, Glass, Sakura, Jarvis), position, how long it stays, title, message templates. The preview matches what peon-ping draws; **Send test** shows the real one. Phone pushes via ntfy, Pushover or Telegram |
 | **Get packs** | Browse and preview the 370+ packs in the peon-ping registry, filter by language, install with one click |
 | **PeonBar** (macOS) | Menu-bar icon: sounds on/off, volume slider, default pack, open the editor, start at login |
 
-| Pack editor | Tools |
+| Pack editor | Where |
 |---|---|
-| ![Pack editor](docs/pack-peon.png) | ![Tools](docs/tools.png) |
+| ![Pack editor](docs/pack-peon.png) | ![Where: tools and folders](docs/tools.png) |
 
 | Notifications | Get packs |
 |---|---|
 | ![Notifications](docs/notifications.png) | ![Get packs](docs/browse.png) |
+
+| Quiet | |
+|---|---|
+| ![Quiet](docs/quiet.png) | |
 
 Everything runs locally: the server listens on `127.0.0.1` only and has no dependencies.
 
@@ -85,6 +90,18 @@ stay in sync.
 
 **Tools.** `peon packs ide-bind <tool> <pack>`, `ide-unbind` and `packs use` (the `ide_rules` and `default_pack`
 keys).
+
+**Folders.** `peon packs bind <pack> --pattern <folder>` / `packs unbind --pattern` (`path_rules`) and
+`peon packs exclude add|remove` (`exclude_dirs`). Folder suggestions come from the project paths in
+`~/.claude.json`; only the paths are read.
+
+**Quiet.** `meeting_detect`, `focus_detect` (+ `focus_detect_mode`), `headphones_only` and
+`suppress_sound_when_tab_focused` in `config.json` (peon-ping has no command for them). Focus detection reads
+macOS's Do Not Disturb store, which needs Full Disk Access for the app your agent runs in; without it peon-ping
+keeps playing.
+
+**Phone.** `peon mobile ntfy|pushover|telegram …`, `mobile on|off` and `mobile test`. Tokens are passed to peon-ping
+and stored in its `config.json`; the editor never sends them back to the browser.
 
 **Installing packs.** The registry is read from `https://peonping.github.io/registry/index.json` (cached for
 10 minutes); installs run `peon packs install <name>`, removals `peon packs remove`.
