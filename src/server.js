@@ -10,6 +10,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const AUDIO_TYPES = { '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.aiff': 'audio/aiff' };
 const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.icns': 'image/x-icns' };
 const MAX_BODY = 64 * 1024;
+const MAX_UPLOAD = 5 * 1024 * 1024 + 1;
 const str = (v) => String(v ?? '');
 
 function sendJson(res, status, data) {
@@ -18,20 +19,20 @@ function sendJson(res, status, data) {
   res.end(body);
 }
 
-function readBody(req) {
+function readBody(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > MAX_BODY) {
+      if (size > max) {
         reject(new Error('body too large'));
         req.destroy();
         return;
       }
       chunks.push(chunk);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -141,9 +142,34 @@ function createServer({ peon = createPeon() } = {}) {
       '/api/mobile': (p) => peon.setMobile(p),
       '/api/mobile/enabled': (p) => peon.setMobileEnabled(Boolean(p.on)),
       '/api/mobile/test': () => peon.testMobile(),
+      '/api/packs/create': (p) => peon.createPack({ name: str(p.name), display_name: str(p.display_name), from: str(p.from) }),
+      '/api/sounds/add': (p) => peon.addSoundFrom(str(p.pack), str(p.category), str(p.from_pack), str(p.from_path)),
+      '/api/sounds/remove': (p) => peon.removeSound(str(p.pack), str(p.category), str(p.file)),
+      '/api/sounds/rename': (p) => peon.renameSound(str(p.pack), str(p.category), str(p.file), str(p.label)),
+      '/api/settings/stop-sound': (p) => peon.setStopSoundOnClose(Boolean(p.on)),
       '/api/install': (p) => peon.installPack(str(p.pack)),
       '/api/remove': (p) => peon.removePack(str(p.pack)),
     };
+
+    // Raw file upload: POST /api/upload?pack=&category=&name=&label= with the audio bytes as the body
+    if (req.method === 'POST' && url.pathname === '/api/upload') {
+      const origin = req.headers.origin;
+      if (origin && !hosts.some((h) => origin === `http://${h}`)) {
+        res.writeHead(403).end();
+        return;
+      }
+      let body;
+      try {
+        body = await readBody(req, MAX_UPLOAD);
+      } catch {
+        sendJson(res, 413, { ok: false, message: 'Keep sounds under 5 MB' });
+        return;
+      }
+      const q = (k) => url.searchParams.get(k) || '';
+      const result = peon.uploadSound(q('pack'), q('category'), q('name'), body, q('label'));
+      sendJson(res, result.ok ? 200 : 400, result);
+      return;
+    }
 
     if (req.method === 'POST' && actions[url.pathname]) {
       const origin = req.headers.origin;
@@ -153,7 +179,7 @@ function createServer({ peon = createPeon() } = {}) {
       }
       let payload;
       try {
-        payload = JSON.parse((await readBody(req)) || '{}');
+        payload = JSON.parse((await readBody(req)).toString('utf8') || '{}');
       } catch {
         sendJson(res, 400, { ok: false, message: 'bad request' });
         return;

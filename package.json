@@ -1,6 +1,6 @@
 {
   "name": "peon-ping-editor",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "UI for peon-ping: edit sound packs, pick a pack per AI coding tool (Claude Code, Copilot, Cursor, Codex), install packs from the registry, style notifications, plus a macOS menu-bar toggle",
   "license": "MIT",
   "author": "Serhii Husachenko",

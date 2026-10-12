@@ -118,6 +118,22 @@
   .phone .help a { color:var(--accent); }
   .phone .actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
 
+  .create-form { display:grid; gap:8px; width:100%; text-align:left; }
+  .create-form label { font-size:12px; color:var(--dim); }
+  .create-form input, .create-form select { width:100%; }
+  .add-panel { border-top:1px solid var(--line); padding:12px 14px; background:var(--surface-2); }
+  .add-panel .picker { max-height:300px; overflow-y:auto; margin-top:10px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+  .add-panel .pick { display:flex; gap:10px; align-items:center; padding:6px 10px; border-bottom:1px solid var(--line); }
+  .add-panel .pick:last-child { border-bottom:none; }
+  .add-panel .pick .info { flex:1; min-width:0; }
+  .add-panel .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  .add-panel .row select, .add-panel .row input[type=search] { flex:1 1 200px; }
+  .drop-zone { margin-top:10px; border:2px dashed var(--line); border-radius:10px; padding:18px; text-align:center; color:var(--dim); cursor:pointer; }
+  .drop-zone.over { border-color:var(--accent); color:var(--text); }
+  footer { max-width:1040px; margin:0 auto; padding:0 16px 32px; color:var(--dim); font-size:12px; display:flex; gap:14px; flex-wrap:wrap; }
+  footer a { color:var(--dim); }
+  footer a:hover { color:var(--text); }
+
   /* editor */
   .toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
   .toolbar input[type=search] { flex:1 1 220px; }
@@ -288,6 +304,13 @@
   </div>
 </header>
 <main id="view"><div class="loading">Loading…</div></main>
+<footer>
+  <span>peon-ping editor <span id="ver"></span></span>
+  <a href="https://github.com/Ferosima/peon-ping-editor" target="_blank" rel="noopener">GitHub ↗</a>
+  <a href="https://github.com/Ferosima/peon-ping-editor/issues" target="_blank" rel="noopener">Report a problem ↗</a>
+  <a href="https://github.com/PeonPing/peon-ping" target="_blank" rel="noopener">peon-ping ↗</a>
+  <a href="https://openpeon.com/packs" target="_blank" rel="noopener">Sound packs ↗</a>
+</footer>
 <div id="toast" role="status"></div>
 
 <script>
@@ -397,6 +420,7 @@ async function refreshCore() {
 /* ---------- global controls ---------- */
 function renderGlobal() {
   const s = store.status;
+  $('#ver').textContent = s.editor_version ? 'v' + s.editor_version : '';
   $('#soundsOn').checked = s.sounds_on;
   $('#soundsText').textContent = s.sounds_on ? 'Sounds on' : 'Muted';
   document.body.classList.toggle('muted', !s.sounds_on);
@@ -433,6 +457,7 @@ function viewPacks() {
   const cards = store.packs.map((p) => {
     const chips = [];
     if (p.name === def) chips.push(el('span', { className: 'chip accent', textContent: 'Default' }));
+    if (p.custom) chips.push(el('span', { className: 'chip moved', textContent: 'Yours' }));
     for (const id of p.used_by.filter((u) => u !== 'default')) chips.push(el('span', { className: 'chip', textContent: toolName(id) }));
     return el('div', { className: 'card pack-card' },
       el('div', { className: 'top' },
@@ -444,11 +469,59 @@ function viewPacks() {
         p.name !== def ? el('button', { className: 'btn sm', textContent: 'Make default', onclick: () => makeDefault(p.name) }) : null,
         p.name !== def ? el('button', { className: 'btn sm ghost danger', textContent: 'Remove', onclick: () => removePack(p.name, p.display_name) }) : null));
   });
+  cards.push(createCard());
   cards.push(el('a', { className: 'card pack-card add', href: '#/browse' }, el('div', { style: 'font-size:24px' }, '＋'), el('div', {}, 'Get more packs'), el('div', { className: 'small' }, '370+ in the registry')));
   return [
     el('div', { className: 'page-head' }, el('div', {}, el('h1', { textContent: 'My packs' }), el('p', { textContent: store.packs.length + ' installed. The default pack plays everywhere a tool has no pack of its own.' }))),
     el('div', { className: 'grid' }, cards),
   ];
+}
+
+function slugify(text) {
+  return String(text).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+}
+
+function uniqueSlug(base) {
+  let slug = slugify(base) || 'my-pack';
+  if (slug.length < 2) slug += '-pack';
+  let n = 2;
+  const taken = new Set(store.packs.map((p) => p.name));
+  let candidate = slug;
+  while (taken.has(candidate)) candidate = slug.slice(0, 36) + '-' + n++;
+  return candidate;
+}
+
+async function createPack(body) {
+  const data = await post('/api/packs/create', body);
+  if (!done(data, data.message)) return;
+  await refreshCore();
+  location.hash = '#/pack/' + encodeURIComponent(data.name);
+}
+
+function createCard() {
+  const card = el('div', { className: 'card pack-card add', role: 'button', tabIndex: 0 },
+    el('div', { style: 'font-size:24px' }, '＋'), el('div', {}, 'Create your own pack'), el('div', { className: 'small' }, 'Mix sounds from other packs or upload yours'));
+  const open = () => {
+    const title = el('input', { type: 'text', placeholder: 'e.g. Team voices', maxLength: 60 });
+    const id = el('input', { type: 'text', placeholder: 'team-voices', maxLength: 40, spellcheck: false });
+    let idTouched = false;
+    title.oninput = () => { if (!idTouched) id.value = uniqueSlug(title.value); };
+    id.oninput = () => (idTouched = true);
+    const from = el('select', {}, el('option', { value: '', textContent: 'Empty pack' }), store.packs.map((p) => el('option', { value: p.name, textContent: 'Copy of ' + p.display_name })));
+    const go = el('button', { className: 'btn primary', textContent: 'Create', onclick: () => createPack({ name: id.value || uniqueSlug(title.value), display_name: title.value, from: from.value }) });
+    card.className = 'card pack-card';
+    card.onclick = card.onkeydown = null;
+    card.replaceChildren(el('div', { className: 'create-form' },
+      el('div', { className: 'name', textContent: 'New pack' }),
+      el('div', {}, el('label', { textContent: 'Name' }), title),
+      el('div', {}, el('label', { textContent: 'Id (folder name)' }), id),
+      el('div', {}, el('label', { textContent: 'Start from' }), from),
+      el('div', { className: 'bottom' }, go, el('button', { className: 'btn ghost', textContent: 'Cancel', onclick: (e) => { e.stopPropagation(); route(); } }))));
+    title.focus();
+  };
+  card.onclick = open;
+  card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+  return card;
 }
 
 async function viewTools() {
@@ -587,13 +660,16 @@ async function viewPack(name) {
 
   const chips = [];
   if (isDefault) chips.push(el('span', { className: 'chip accent', textContent: 'Default' }));
+  if (p.custom) chips.push(el('span', { className: 'chip moved', textContent: 'Your pack' }));
   for (const id of info.used_by.filter((u) => u !== 'default')) chips.push(el('span', { className: 'chip', textContent: toolName(id) }));
 
   return [
     el('div', { className: 'small', style: 'margin-bottom:8px' }, el('a', { href: '#/packs', className: 'dim', textContent: '← My packs' })),
     el('div', { className: 'page-head' },
       el('div', {}, el('h1', { textContent: p.display_name }), el('p', {}, el('span', { className: 'mono', textContent: p.name }), chips.length ? ' · ' : '', ...chips.flatMap((c) => [c, ' ']))),
-      el('div', { className: 'actions' }, isDefault ? null : el('button', { className: 'btn', textContent: 'Make default', onclick: () => makeDefault(name) }))),
+      el('div', { className: 'actions' },
+        p.custom ? null : el('button', { className: 'btn', textContent: 'Make it your own', title: 'Copy this pack so you can add, upload, rename and delete sounds', onclick: () => createPack({ name: uniqueSlug(name + '-mine'), display_name: p.display_name + ' (mine)', from: name }) }),
+        isDefault ? null : el('button', { className: 'btn', textContent: 'Make default', onclick: () => makeDefault(name) }))),
     el('div', { className: 'toolbar' }, search, onlyOn, el('span', { className: 'small dim', textContent: 'Tip: drag sounds to reorder them or move them to another event; ⇄ moves without dragging' })),
     list,
   ];
@@ -621,13 +697,14 @@ function renderEvents(p, q, only) {
       }, 'Event ' + eventTitle(cat.name)),
       el('div', {}, el('div', { className: 't', textContent: eventTitle(cat.name) }), el('div', { className: 'small dim' }, (EVENTS[cat.name] || {}).hint || cat.hint, ' · ', el('span', { className: 'mono', textContent: cat.name }))),
       el('span', { className: 'count', textContent: cat.sounds.length ? on + ' of ' + cat.sounds.length + ' on' : '' }),
-      cat.sounds.length ? el('button', { className: 'btn sm ghost', textContent: on === cat.sounds.length ? 'Turn all off' : 'Turn all on', onclick: () => setAll(cat, on !== cat.sounds.length) }) : null);
+      cat.sounds.length ? el('button', { className: 'btn sm ghost', textContent: on === cat.sounds.length ? 'Turn all off' : 'Turn all on', onclick: () => setAll(cat, on !== cat.sounds.length) }) : null,
+      p.custom ? el('button', { className: 'btn sm', textContent: '＋ Add sound', onclick: () => toggleAddPanel(section, head, p, cat) }) : null);
     section.append(head);
     if (!cat.category_enabled) section.append(offBanner());
     else if (cat.sounds.length && on === 0) section.append(el('div', { className: 'banner', textContent: 'All sounds are off — this event will be silent.' }));
 
     const listEl = el('div', { className: 'sound-list' });
-    if (!cat.sounds.length) listEl.append(el('div', { className: 'empty', textContent: 'No sounds yet. Drag one here or use ⇄ on any sound.' }));
+    if (!cat.sounds.length) listEl.append(el('div', { className: 'empty', textContent: p.custom ? 'No sounds yet. Use ＋ Add sound, or drag one here.' : 'No sounds yet. Drag one here or use ⇄ on any sound.' }));
     for (const s of sounds) listEl.append(renderSound(p, cat, s));
     section.append(listEl);
     makeDropTarget(section, cat);
@@ -635,6 +712,75 @@ function renderEvents(p, q, only) {
   }
   if (!sections.length) sections.push(el('div', { className: 'loading', textContent: 'No sounds match.' }));
   return sections;
+}
+
+function toggleAddPanel(section, head, p, cat) {
+  const existing = section.querySelector('.add-panel');
+  if (existing) { existing.remove(); return; }
+  const panel = el('div', { className: 'add-panel' });
+  let mode = 'pack';
+  const draw = async () => {
+    const seg = el('div', { className: 'seg' }, [['pack', 'From a pack'], ['upload', 'Upload a file']].map(([v, t]) =>
+      el('button', { className: v === mode ? 'on' : '', textContent: t, onclick: () => { mode = v; draw(); } })));
+    panel.replaceChildren(seg);
+    if (mode === 'upload') {
+      const input = el('input', { type: 'file', accept: '.wav,.mp3,.ogg,.m4a,.aiff,.aif,audio/*', multiple: true, style: 'display:none' });
+      const zone = el('div', { className: 'drop-zone', textContent: 'Drop audio files here or click to choose — WAV, MP3, OGG, M4A or AIFF, up to 5 MB each' });
+      const send = async (files) => {
+        for (const f of files) {
+          zone.textContent = 'Uploading ' + f.name + '…';
+          const label = f.name.replace(/\.[^.]+$/, '');
+          const res = await fetch('/api/upload?' + new URLSearchParams({ pack: p.name, category: cat.name, name: f.name, label }), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: f });
+          let data;
+          try { data = await res.json(); } catch { data = { ok: false, message: 'Upload failed' }; }
+          if (!done(data, data.message)) break;
+        }
+        route();
+      };
+      zone.onclick = () => input.click();
+      input.onchange = () => send([...input.files]);
+      zone.ondragover = (e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); zone.classList.add('over'); } };
+      zone.ondragleave = () => zone.classList.remove('over');
+      zone.ondrop = (e) => { e.preventDefault(); e.stopPropagation(); zone.classList.remove('over'); send([...e.dataTransfer.files]); };
+      panel.append(zone, input);
+      return;
+    }
+    const others = store.packs.filter((x) => x.name !== p.name);
+    const packSel = el('select', {}, others.map((x) => el('option', { value: x.name, textContent: x.display_name })));
+    const search = el('input', { type: 'search', placeholder: 'Find a sound…' });
+    const picker = el('div', { className: 'picker' }, el('div', { className: 'empty-row', textContent: 'Loading…' }));
+    panel.append(el('div', { className: 'row' }, packSel, search), picker);
+    let sounds = [];
+    const list = () => {
+      const q = search.value.trim().toLowerCase();
+      const have = new Set(cat.sounds.map((x) => x.file));
+      const rows = sounds.filter((x) => !q || (x.label + ' ' + x.file + ' ' + x.events).toLowerCase().includes(q)).map((x) =>
+        el('div', { className: 'pick' }, playBtn(() => localSrc(packSel.value, x.path)),
+          el('div', { className: 'info' }, el('div', { className: 'label', textContent: x.label || x.file }), el('div', { className: 'small dim', textContent: x.file + ' · ' + x.events })),
+          have.has(x.file) ? el('span', { className: 'small dim', textContent: 'Added' }) :
+            el('button', { className: 'btn sm primary', textContent: 'Add', onclick: async () => {
+              if (done(await post('/api/sounds/add', { pack: p.name, category: cat.name, from_pack: packSel.value, from_path: x.path }), 'Added ' + (x.label || x.file))) route();
+            } })));
+      picker.replaceChildren(...(rows.length ? rows : [el('div', { className: 'empty-row', textContent: 'No sounds here.' })]));
+    };
+    const load = async () => {
+      const st = await getJson('/api/pack?name=' + encodeURIComponent(packSel.value));
+      const byPath = new Map();
+      for (const c of st.categories) for (const x of c.sounds) {
+        if (x.missing) continue;
+        const e = byPath.get(x.path) || { ...x, events: [] };
+        e.events.push(eventTitle(c.name));
+        byPath.set(x.path, e);
+      }
+      sounds = [...byPath.values()].map((x) => ({ ...x, events: x.events.join(', ') }));
+      list();
+    };
+    packSel.onchange = load;
+    search.oninput = list;
+    if (others.length) load(); else picker.replaceChildren(el('div', { className: 'empty-row', textContent: 'Install another pack first.' }));
+  };
+  head.after(panel);
+  draw();
 }
 
 function offBanner() {
@@ -660,6 +806,13 @@ function renderSound(p, cat, s) {
     play,
     el('div', { className: 'info' }, el('div', { className: 'label', textContent: s.label || s.file }), el('div', { className: 'file' }, el('span', { className: 'mono', textContent: s.file }), chips.length ? ' ' : '', ...chips.flatMap((c) => [c, ' ']))),
     moveSel,
+    p.custom ? el('button', { className: 'btn sm ghost', textContent: '✎', title: 'Rename', onclick: async () => {
+      const label = prompt('Name for this sound', s.label || s.file);
+      if (label !== null && done(await post('/api/sounds/rename', { pack: p.name, category: cat.name, file: s.file, label }), 'Renamed')) route();
+    } }) : null,
+    p.custom ? el('button', { className: 'btn sm ghost danger', textContent: '✕', title: 'Remove from this event', onclick: async () => {
+      if (done(await post('/api/sounds/remove', { pack: p.name, category: cat.name, file: s.file }), 'Removed ' + (s.label || s.file))) route();
+    } }) : null,
     switchEl(s.enabled, async (input) => {
       input.disabled = true;
       const ok = done(await post('/api/toggle', { pack: p.name, category: cat.name, file: s.file, enabled: input.checked }));
@@ -963,7 +1116,15 @@ async function viewNotifications() {
       el('div', { className: 'field' }, el('span', { className: 'lbl', textContent: 'Stays on screen' }), dismiss),
       overlay ? boolField('All screens', 'all_screens', 'Show the banner on every display') : null,
       overlay && n.theme !== 'neon' ? boolField('Close button', 'close_button') : null,
-      overlay ? boolField('Stack banners', 'stacking', 'Keep earlier banners from the same session') : null),
+      overlay ? boolField('Stack banners', 'stacking', 'Keep earlier banners from the same session') : null,
+      overlay ? el('div', { className: 'field' }, el('span', { className: 'lbl', textContent: 'Stop sound on close' }),
+        switchEl(store.status.stop_sound_on_close, async (input) => {
+          input.disabled = true;
+          if (done(await post('/api/settings/stop-sound', { on: input.checked }), input.checked ? 'Closing a banner stops its sound' : 'Sounds play to the end')) store.status.stop_sound_on_close = input.checked;
+          else input.checked = !input.checked;
+          input.disabled = false;
+        }, 'Stop sound on close'),
+        el('span', { className: 'small dim', textContent: 'Clicking or closing a banner cuts its sound short. Needs PeonBar running.' })) : null),
     el('div', { className: 'group' }, el('h3', { textContent: 'Title' }),
       el('div', { className: 'field' }, el('span', { className: 'lbl', textContent: 'Label' }), title),
       boolField('Add tool name', 'title_ide', 'e.g. “my-app - Claude Code”')),

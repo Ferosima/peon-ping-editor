@@ -55,6 +55,15 @@ test('HTTP API', async (t) => {
   assert.equal(moved.status, 200);
   assert.equal((await post('/api/move', { pack: 'demo', file: 'hi.wav', from: 'task.complete', to: 'nope' })).status, 400);
   assert.equal((await post('/api/toggle', {}, { Origin: 'http://evil.example' })).status, 403);
+  // Own pack + raw upload
+  assert.equal((await post('/api/packs/create', { name: 'mine' })).status, 200);
+  const wav = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVE'), Buffer.alloc(32)]);
+  const upload = (body, headers = {}) =>
+    fetch(base + '/api/upload?pack=mine&category=task.complete&name=hey.wav', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', ...headers }, body });
+  assert.equal((await upload(wav)).status, 200);
+  assert.equal((await upload(Buffer.from('not audio'))).status, 400);
+  assert.equal((await upload(wav, { Origin: 'http://evil.example' })).status, 403);
+
   // DNS rebinding: a foreign Host header is refused even for reads
   const http = require('node:http');
   const status = await new Promise((resolve) =>

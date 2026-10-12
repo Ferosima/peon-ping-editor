@@ -64,6 +64,11 @@ const TOOL_ALIASES = {
 const PINNED_TOOLS = ['claude', 'copilot', 'cursor', 'codex'];
 
 const PATCH_MARKER = 'x_sounds_ui_patched';
+// Packs made in the editor: their manifest is ours to edit directly
+const CUSTOM_MARKER = 'x_peon_editor_custom';
+const AUDIO_EXT = ['.wav', '.mp3', '.ogg', '.m4a', '.aiff', '.aif'];
+const MAX_SOUND_BYTES = 5 * 1024 * 1024;
+const NEW_PACK_NAME = /^[a-z0-9][a-z0-9_-]{1,39}$/;
 
 const NOTIFY = {
   styles: ['overlay', 'standard'],
@@ -222,7 +227,7 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
       if (defaultPack === name) usedBy.push('default');
       const files = new Set();
       for (const cat of Object.values(manifest.categories || {})) for (const s of cat.sounds || []) files.add(basename(s.file));
-      return { name, display_name: manifest.display_name || name, used_by: usedBy, sound_count: files.size };
+      return { name, display_name: manifest.display_name || name, used_by: usedBy, sound_count: files.size, custom: Boolean(manifest[CUSTOM_MARKER]) };
     });
   }
 
@@ -338,6 +343,7 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
     return {
       name: pack,
       display_name: manifest.display_name || pack,
+      custom: Boolean(manifest[CUSTOM_MARKER]),
       categories: ordered.map((catName) => {
         const off = new Set(disabled[catName] || []);
         return {
@@ -494,6 +500,7 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
     if (!soundInCategory(pack, from, file)) return { ok: false, message: `"${file}" is not in ${from}` };
     if (from !== to && soundInCategory(pack, to, file)) return { ok: false, message: `"${file}" already plays on ${to}` };
     if (before === file) return { ok: true, message: '' };
+    if (isCustom(pack)) return moveInCustom(pack, file, from, to, before);
 
     const edits = loadEdits(pack);
     if (from !== to) {
@@ -523,6 +530,182 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
     return { ok: true, message: `${file}: ${from} → ${to}` };
   }
 
+  // ---- Your own packs ------------------------------------------------------------------------
+  function isCustom(pack) {
+    return Boolean((loadManifest(pack) || {})[CUSTOM_MARKER]);
+  }
+
+  function customManifest(pack) {
+    if (!installedPacks().includes(pack)) return { error: `Pack "${pack}" is not installed` };
+    const file = manifestPath(pack);
+    const manifest = readJson(file, null);
+    if (!manifest || !manifest[CUSTOM_MARKER]) return { error: 'Only packs you made here can be changed this way' };
+    manifest.categories ||= {};
+    return { file, manifest };
+  }
+
+  function sha256(buf) {
+    return require('node:crypto').createHash('sha256').update(buf).digest('hex');
+  }
+
+  function slugFile(name) {
+    const ext = path.extname(name).toLowerCase();
+    const base = path.basename(name, path.extname(name)).normalize('NFKD').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'sound';
+    return base + ext;
+  }
+
+  // Stores bytes in the pack's sounds/ folder; an identical file is reused, a different one gets a new name
+  function storeSound(pack, wanted, buf) {
+    const dir = path.join(packsDir, pack, 'sounds');
+    fs.mkdirSync(dir, { recursive: true });
+    const hash = sha256(buf);
+    const ext = path.extname(wanted);
+    const stem = path.basename(wanted, ext);
+    for (let i = 0; i < 1000; i++) {
+      const name = i ? `${stem}-${i + 1}${ext}` : wanted;
+      const target = path.join(dir, name);
+      if (!fs.existsSync(target)) {
+        fs.writeFileSync(target, buf);
+        return { file: `sounds/${name}`, hash };
+      }
+      if (sha256(fs.readFileSync(target)) === hash) return { file: `sounds/${name}`, hash };
+    }
+    throw new Error('Too many files with that name');
+  }
+
+  function addEntry(pack, category, entry) {
+    const { file, manifest, error } = customManifest(pack);
+    if (error) return { ok: false, message: error };
+    if (!(category in CATEGORY_HINTS)) return { ok: false, message: `Unknown event "${category}"` };
+    const sounds = ((manifest.categories[category] ||= {}).sounds ||= []);
+    if (sounds.some((s) => basename(s.file) === basename(entry.file))) return { ok: false, message: 'That sound is already on this event' };
+    sounds.push(entry);
+    writeJson(file, manifest);
+    return { ok: true, message: `Added ${entry.label || basename(entry.file)}` };
+  }
+
+  function createPack({ name, display_name, from } = {}) {
+    const slug = String(name || '').trim().toLowerCase();
+    if (!NEW_PACK_NAME.test(slug)) return { ok: false, message: 'Pack id: 2–40 characters, a–z, 0–9, - or _' };
+    if (fs.existsSync(path.join(packsDir, slug))) return { ok: false, message: `A pack called "${slug}" already exists` };
+    const title = String(display_name || '').trim().slice(0, 60) || slug;
+    let manifest = { cesp_version: '1.0', name: slug, display_name: title, version: '1.0.0', author: { name: os.userInfo().username }, license: 'personal', language: 'en', categories: {} };
+    const target = path.join(packsDir, slug);
+    if (from) {
+      if (!installedPacks().includes(from)) return { ok: false, message: `Pack "${from}" is not installed` };
+      applyMoves(from);
+      const source = loadManifest(from) || {};
+      fs.mkdirSync(path.join(target, 'sounds'), { recursive: true });
+      const categories = {};
+      for (const [cat, data] of Object.entries(source.categories || {})) {
+        categories[cat] = { sounds: [] };
+        for (const sound of data.sounds || []) {
+          const real = resolveAudio(from, String(sound.file || ''), source);
+          if (!real) continue; // a file that never downloaded
+          const dest = path.join(target, 'sounds', basename(real));
+          if (!fs.existsSync(dest)) fs.copyFileSync(real, dest);
+          categories[cat].sounds.push({ ...sound, file: `sounds/${basename(real)}` });
+        }
+      }
+      manifest = { ...manifest, language: source.language || 'en', categories };
+    }
+    fs.mkdirSync(path.join(target, 'sounds'), { recursive: true });
+    writeJson(path.join(target, 'openpeon.json'), { ...manifest, [CUSTOM_MARKER]: true });
+    return { ok: true, message: `Created ${title}`, name: slug };
+  }
+
+  function addSoundFrom(pack, category, sourcePack, sourcePath) {
+    const { error } = customManifest(pack);
+    if (error) return { ok: false, message: error };
+    const real = resolveAudio(sourcePack, String(sourcePath || ''));
+    if (!real) return { ok: false, message: 'That sound is not available' };
+    const source = loadManifest(sourcePack) || {};
+    let label = '';
+    for (const cat of Object.values(source.categories || {})) {
+      const hit = (cat.sounds || []).find((s) => s.file === sourcePath);
+      if (hit) { label = hit.label || ''; break; }
+    }
+    const stored = storeSound(pack, slugFile(basename(real)), fs.readFileSync(real));
+    return addEntry(pack, category, { file: stored.file, label, sha256: stored.hash });
+  }
+
+  // The first bytes decide, not the file name: WAV, MP3, OGG, M4A/AAC or AIFF
+  function looksLikeAudio(buf) {
+    const head = buf.subarray(0, 12);
+    const ascii = (a, b) => head.subarray(a, b).toString('latin1');
+    return (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE') || ascii(0, 3) === 'ID3' || (head[0] === 0xff && (head[1] & 0xe0) === 0xe0) ||
+      ascii(0, 4) === 'OggS' || ascii(4, 8) === 'ftyp' || (ascii(0, 4) === 'FORM' && /^AIF[FC]$/.test(ascii(8, 12)));
+  }
+
+  function uploadSound(pack, category, filename, buf, label = '') {
+    const { error } = customManifest(pack);
+    if (error) return { ok: false, message: error };
+    const ext = path.extname(String(filename || '')).toLowerCase();
+    if (!AUDIO_EXT.includes(ext)) return { ok: false, message: `Use ${AUDIO_EXT.join(', ')} files` };
+    if (!buf || !buf.length) return { ok: false, message: 'The file is empty' };
+    if (buf.length > MAX_SOUND_BYTES) return { ok: false, message: 'Keep sounds under 5 MB' };
+    if (!looksLikeAudio(buf)) return { ok: false, message: 'That does not look like an audio file' };
+    const stored = storeSound(pack, slugFile(filename), buf);
+    const name = String(label || '').trim().slice(0, 80) || path.basename(String(filename), ext);
+    return addEntry(pack, category, { file: stored.file, label: name, sha256: stored.hash });
+  }
+
+  function removeSound(pack, category, fileName) {
+    const { file, manifest, error } = customManifest(pack);
+    if (error) return { ok: false, message: error };
+    const sounds = (manifest.categories[category] || {}).sounds || [];
+    const idx = sounds.findIndex((s) => basename(s.file) === fileName);
+    if (idx === -1) return { ok: false, message: 'Sound not found' };
+    const [gone] = sounds.splice(idx, 1);
+    writeJson(file, manifest);
+    // Delete the file only when no other event still plays it
+    const stillUsed = Object.values(manifest.categories).some((c) => (c.sounds || []).some((s) => s.file === gone.file));
+    if (!stillUsed) {
+      const real = resolveAudio(pack, gone.file, { categories: { x: { sounds: [gone] } } });
+      if (real) fs.rmSync(real, { force: true });
+    }
+    return { ok: true, message: `Removed ${gone.label || fileName}` };
+  }
+
+  function renameSound(pack, category, fileName, label) {
+    const { file, manifest, error } = customManifest(pack);
+    if (error) return { ok: false, message: error };
+    const sound = ((manifest.categories[category] || {}).sounds || []).find((s) => basename(s.file) === fileName);
+    if (!sound) return { ok: false, message: 'Sound not found' };
+    sound.label = String(label || '').trim().slice(0, 80);
+    writeJson(file, manifest);
+    return { ok: true, message: 'Renamed' };
+  }
+
+  function moveInCustom(pack, fileName, from, to, before) {
+    const { file, manifest } = customManifest(pack);
+    const source = manifest.categories[from].sounds;
+    const idx = source.findIndex((s) => basename(s.file) === fileName);
+    const [entry] = source.splice(idx, 1);
+    const target = ((manifest.categories[to] ||= {}).sounds ||= []);
+    const at = before ? target.findIndex((s) => basename(s.file) === before) : -1;
+    target.splice(at === -1 ? target.length : at, 0, entry);
+    writeJson(file, manifest);
+    if (from !== to) {
+      const cfg = loadConfig();
+      const packDisabled = (cfg.disabled_sounds || {})[pack] || {};
+      if ((packDisabled[from] || []).includes(fileName)) {
+        packDisabled[from] = packDisabled[from].filter((f) => f !== fileName);
+        packDisabled[to] = [...new Set([...(packDisabled[to] || []), fileName])].sort();
+        writeJson(configPath, cfg);
+      }
+    }
+    return { ok: true, message: from === to ? '' : `${fileName}: ${from} → ${to}` };
+  }
+
+  // Our own key in peon-ping's config.json; PeonBar reads it (peon-ping ignores keys it does not know)
+  function setStopSoundOnClose(on) {
+    const cfg = loadConfig();
+    cfg.x_editor_stop_sound_on_close = Boolean(on);
+    writeJson(configPath, cfg);
+    return { ok: true, message: on ? 'Closing a banner stops its sound' : 'Sounds play to the end' };
+  }
+
   function status() {
     const cfg = loadConfig();
     const flags = cfg.categories || {};
@@ -530,6 +713,8 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
       sounds_on: !fs.existsSync(path.join(paths.peonDir, '.paused')),
       volume: typeof cfg.volume === 'number' ? cfg.volume : 0.5,
       default_pack: cfg.default_pack || cfg.active_pack || 'peon',
+      editor_version: require('../package.json').version,
+      stop_sound_on_close: cfg.x_editor_stop_sound_on_close !== false,
       events: Object.keys(CATEGORY_HINTS).map((name) => ({ name, hint: CATEGORY_HINTS[name], enabled: flags[name] !== false })),
     };
   }
@@ -898,6 +1083,12 @@ function createPeon(paths = resolvePaths(), { fetchRegistry = defaultFetchRegist
     notifications,
     setNotifications,
     testNotification,
+    createPack,
+    setStopSoundOnClose,
+    addSoundFrom,
+    uploadSound,
+    removeSound,
+    renameSound,
     quiet,
     setQuiet,
     folders,

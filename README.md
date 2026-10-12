@@ -38,12 +38,13 @@ peon-ping, its settings and your sound edits stay in place.
 | | |
 |---|---|
 | **My packs** | Installed packs, which tools use each one, play a sample, make one the default, remove |
+| **Your own packs** | Create a pack from scratch or copy an existing one, then add sounds from any installed pack or upload your own (WAV, MP3, OGG, M4A, AIFF), rename and remove them |
 | **Pack editor** | Every sound grouped by event (Session start, Task done, Needs your input, …). Turn sounds or whole events on and off, drag sounds to reorder them or drop them into another event, see files that failed to download |
 | **Where** | A different pack per tool (Claude Code, GitHub Copilot, Cursor, Codex, Gemini CLI, Windsurf, …) and per project folder; silence whole folders |
 | **Quiet** | Stay silent during calls, in macOS Focus / Do Not Disturb, without headphones, or when you are already looking at the agent's tab |
 | **Notifications** | Banner style and theme (Classic, Glass, Sakura, Jarvis), position, how long it stays, title, message templates. The preview matches what peon-ping draws; **Send test** shows the real one. Phone pushes via ntfy, Pushover or Telegram |
 | **Get packs** | Browse and preview the 370+ packs in the peon-ping registry, filter by language, install with one click |
-| **PeonBar** (macOS) | Menu-bar icon: sounds on/off, volume slider, default pack, open the editor, start at login, check for updates and update in one click |
+| **PeonBar** (macOS) | Menu-bar icon: sounds on/off, volume slider, default pack, open the editor, start at login, check for updates and update in one click. Closing a banner stops its sound |
 
 | Pack editor | Where |
 |---|---|
@@ -87,6 +88,14 @@ stay in sync.
 - each move remembers which event it came from, because packs often reuse one file in several events;
 - a sound cannot be moved into an event that already plays it, and a disabled sound stays disabled after a move;
 - when everything is back where it was, the manifest is restored byte-for-byte and `.orig` is removed.
+
+**Your own packs.** A normal CESP pack in peon-ping's `packs/` folder (`openpeon.json` + `sounds/`), marked with
+`x_peon_editor_custom` so the editor edits it in place. Uploads are checked by content (not just the extension) and
+limited to 5 MB; copied and uploaded files get a `sha256` like registry packs.
+
+**Stop sound on close.** peon-ping's banners broadcast `com.peonping.dismiss.*` when clicked or closed (not when they
+time out). PeonBar listens and stops the player recorded in `.sound.pid` if it is still `afplay`/`peon-play`.
+Turn it off in Notifications → Behaviour (`x_editor_stop_sound_on_close` in `config.json`).
 
 **Tools.** `peon packs ide-bind <tool> <pack>`, `ide-unbind` and `packs use` (the `ide_rules` and `default_pack`
 keys).

@@ -106,6 +106,25 @@ func sampleSound(pack: String) -> String? {
     return nil
 }
 
+// Stops the sound peon-ping is playing (it records the player's pid), but only if that pid is still a player:
+// pids get reused, and killing an unrelated process would be bad
+func stopCurrentSound() {
+    guard let text = try? String(contentsOfFile: "\(peonDir)/.sound.pid", encoding: .utf8),
+          let pid = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 1 else { return }
+    let ps = Process()
+    ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+    ps.arguments = ["-o", "comm=", "-p", String(pid)]
+    let pipe = Pipe()
+    ps.standardOutput = pipe
+    ps.standardError = FileHandle.nullDevice
+    guard (try? ps.run()) != nil else { return }
+    ps.waitUntilExit()
+    let command = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    let name = (command.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).lastPathComponent
+    guard ["afplay", "peon-play"].contains(name) else { return }
+    kill(pid, SIGTERM)
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     let menu = NSMenu()
@@ -129,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshIcon()
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.refreshIcon() }
         announceFinishedUpdate()
+        listenForBannerClose()
         // Look for a new version shortly after login, then every few hours (at most once a day)
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in self?.autoCheck() }
         Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in self?.autoCheck() }
@@ -352,6 +372,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             DispatchQueue.main.async { NSWorkspace.shared.open(editorURL) }
         }.resume()
+    }
+
+    // MARK: - Stop the sound when a banner is closed
+
+    // peon-ping's banners post "com.peonping.dismiss[.<theme>].<slot>" when clicked or closed — not when they
+    // time out — so the sound still playing belongs to the banner the user just dismissed.
+    func listenForBannerClose() {
+        let center = DistributedNotificationCenter.default()
+        for prefix in ["com.peonping.dismiss.", "com.peonping.dismiss.glass.", "com.peonping.dismiss.sakura.", "com.peonping.dismiss.jarvis."] {
+            for slot in 0..<10 {
+                center.addObserver(self, selector: #selector(bannerClosed), name: Notification.Name(prefix + String(slot)), object: nil)
+            }
+        }
+    }
+
+    @objc func bannerClosed() {
+        guard (readConfig()["x_editor_stop_sound_on_close"] as? Bool) ?? true else { return }
+        DispatchQueue.global(qos: .userInitiated).async { stopCurrentSound() }
     }
 
     // MARK: - Updates

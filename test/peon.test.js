@@ -42,7 +42,7 @@ function setup() {
 
 test('lists packs with their bindings', () => {
   const { peon } = setup();
-  assert.deepEqual(peon.listPacks(), [{ name: 'demo', display_name: 'Demo', used_by: ['claude', 'default'], sound_count: 3 }]);
+  assert.deepEqual(peon.listPacks(), [{ name: 'demo', display_name: 'Demo', used_by: ['claude', 'default'], sound_count: 3, custom: false }]);
 });
 
 test('pack state shows every CESP event, including empty ones', () => {
@@ -308,4 +308,53 @@ test('phone notifications never expose secrets', async () => {
   assert.ok(!JSON.stringify(m).includes('uabcdefghijklmnop'));
   // No peon.sh in the fixture: set-up is refused rather than half-written
   assert.equal((await peon.setMobile({ service: 'ntfy', topic: 'abc' })).ok, false);
+});
+
+test('your own packs: create, add from another pack, upload, rename, move, remove', () => {
+  const { peon } = setup();
+  const packDir = path.join(peon.paths.packsDir, 'mine');
+  const manifest = () => JSON.parse(fs.readFileSync(path.join(packDir, 'openpeon.json'), 'utf8'));
+  const files = (cat) => ((manifest().categories[cat] || {}).sounds || []).map((s) => path.basename(s.file));
+
+  assert.equal(peon.createPack({ name: 'Bad Name!' }).ok, false);
+  assert.equal(peon.createPack({ name: 'demo' }).ok, false); // exists
+  assert.equal(peon.createPack({ name: 'mine', display_name: 'My pack' }).ok, true);
+  assert.equal(peon.listPacks().find((p) => p.name === 'mine').custom, true);
+
+  // from another pack
+  assert.equal(peon.addSoundFrom('mine', 'task.complete', 'demo', 'sounds/done.wav').ok, true);
+  assert.equal(peon.addSoundFrom('mine', 'task.complete', 'demo', 'sounds/done.wav').ok, false); // already there
+  assert.equal(peon.addSoundFrom('mine', 'task.complete', 'demo', '../../config.json').ok, false);
+  assert.deepEqual(files('task.complete'), ['done.wav']);
+  assert.equal(manifest().categories['task.complete'].sounds[0].label, 'Done');
+
+  // upload: real WAV header accepted, text rejected, size and type checked
+  const wav = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVE'), Buffer.alloc(32)]);
+  assert.equal(peon.uploadSound('mine', 'task.complete', 'my voice.wav', wav, 'Me').ok, true);
+  assert.equal(peon.uploadSound('mine', 'task.complete', 'evil.wav', Buffer.from('#!/bin/sh\nrm -rf /')).ok, false);
+  assert.equal(peon.uploadSound('mine', 'task.complete', 'x.exe', wav).ok, false);
+  assert.equal(peon.uploadSound('mine', 'task.complete', 'big.wav', Buffer.concat([wav, Buffer.alloc(5 * 1024 * 1024)])).ok, false);
+  assert.deepEqual(files('task.complete'), ['done.wav', 'my-voice.wav']);
+
+  // move to the top of another event, then rename and remove
+  assert.equal(peon.addSoundFrom('mine', 'session.start', 'demo', 'sounds/hi.wav').ok, true);
+  assert.equal(peon.moveSound('mine', 'my-voice.wav', 'task.complete', 'session.start', 'hi.wav').ok, true);
+  assert.deepEqual(files('session.start'), ['my-voice.wav', 'hi.wav']);
+  assert.equal(fs.existsSync(path.join(packDir, 'openpeon.json.orig')), false); // own packs are edited in place
+  assert.equal(peon.renameSound('mine', 'session.start', 'my-voice.wav', 'Hello team').ok, true);
+  assert.equal(manifest().categories['session.start'].sounds[0].label, 'Hello team');
+  assert.equal(peon.removeSound('mine', 'session.start', 'my-voice.wav').ok, true);
+  assert.equal(fs.existsSync(path.join(packDir, 'sounds', 'my-voice.wav')), false);
+
+  // official packs are not edited this way
+  assert.equal(peon.addSoundFrom('demo', 'task.complete', 'mine', 'sounds/hi.wav').ok, false);
+});
+
+test('duplicating a pack copies its sounds into a new pack of your own', () => {
+  const { peon } = setup();
+  assert.equal(peon.createPack({ name: 'demo-copy', display_name: 'Demo copy', from: 'demo' }).ok, true);
+  const state = peon.packState('demo-copy');
+  assert.equal(state.custom, true);
+  assert.deepEqual(state.categories.find((c) => c.name === 'task.complete').sounds.map((s) => s.file), ['done.wav']);
+  assert.ok(fs.existsSync(path.join(peon.paths.packsDir, 'demo-copy', 'sounds', 'done.wav')));
 });
