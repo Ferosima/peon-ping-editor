@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [18, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+      - name: Shell scripts parse
+        run: bash -n install.sh && bash -n uninstall.sh && bash -n menubar/build.sh
+
+  menubar:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build PeonBar (universal)
+        run: bash menubar/build.sh build --universal
+      - run: lipo -archs build/PeonBar.app/Contents/MacOS/PeonBar

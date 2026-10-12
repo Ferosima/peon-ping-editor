@@ -1,0 +1,32 @@
+# Push a tag like v0.2.0 to publish a release with a prebuilt PeonBar.app.
+# install.sh downloads it on Macs that have no Swift compiler.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - name: Build PeonBar (universal)
+        run: |
+          bash menubar/build.sh build --universal
+          ditto -c -k --keepParent build/PeonBar.app PeonBar.zip
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" PeonBar.zip \
+            --title "$GITHUB_REF_NAME" \
+            --notes "Install or update: \`curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh | bash\`" \
+            --verify-tag

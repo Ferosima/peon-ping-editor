@@ -1,0 +1,1117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>peon-editor</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+  :root {
+    --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f0f2f5; --line:#e2e5ea; --text:#1b1e24; --dim:#69707d;
+    --accent:#2f9e5a; --accent-soft:#e3f4ea; --accent-text:#ffffff; --danger:#c94436; --warn:#b7791f; --warn-soft:#fdf3e1;
+    --chip:#eef1f6; --chip-text:#3d4553; --moved:#e6eefc; --moved-text:#2e5bb8; --shadow:0 1px 2px rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#14161b; --surface:#1d2027; --surface-2:#252932; --line:#2e333d; --text:#e7e9ee; --dim:#8d94a2;
+      --accent:#4cc27a; --accent-soft:#1f3a2a; --accent-text:#0d1a12; --danger:#ef6b5c; --warn:#e0a84a; --warn-soft:#3a2f1c;
+      --chip:#2a2f39; --chip-text:#c3c9d4; --moved:#26324a; --moved-text:#9db8e8; --shadow:none;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+  button, select, input { font:inherit; color:inherit; }
+  button { cursor:pointer; }
+  button:disabled { cursor:default; opacity:.55; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .mono { font-family:ui-monospace, Menlo, monospace; }
+  .dim { color:var(--dim); }
+  .small { font-size:12px; }
+
+  /* top bar */
+  header { position:sticky; top:0; z-index:5; background:var(--surface); border-bottom:1px solid var(--line); }
+  .bar { max-width:1040px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .brand { font-weight:700; font-size:15px; display:flex; align-items:center; gap:8px; }
+  .brand img { border-radius:5px; }
+  nav { display:flex; gap:4px; overflow-x:auto; }
+  nav a { padding:6px 12px; border-radius:8px; color:var(--dim); text-decoration:none; white-space:nowrap; }
+  nav a:hover { color:var(--text); background:var(--surface-2); }
+  nav a.active { color:var(--text); background:var(--surface-2); font-weight:600; }
+  .global { margin-left:auto; display:flex; align-items:center; gap:14px; }
+  .vol { display:flex; align-items:center; gap:8px; }
+  .vol input { width:120px; accent-color:var(--accent); }
+  .vol output { width:38px; text-align:right; font-variant-numeric:tabular-nums; color:var(--dim); font-size:12px; }
+  .muted .vol { opacity:.45; }
+
+  main { max-width:1040px; margin:0 auto; padding:20px 16px 64px; }
+  h1 { font-size:20px; margin:0; }
+  .page-head { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .page-head p { margin:4px 0 0; color:var(--dim); }
+  .page-head .actions { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
+
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); }
+  .btn { border:1px solid var(--line); background:var(--surface); border-radius:8px; padding:6px 12px; }
+  .btn:hover:not(:disabled) { background:var(--surface-2); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-text); font-weight:600; }
+  .btn.primary:hover:not(:disabled) { filter:brightness(1.05); background:var(--accent); }
+  .btn.ghost { border-color:transparent; background:none; color:var(--dim); }
+  .btn.ghost:hover:not(:disabled) { color:var(--text); background:var(--surface-2); }
+  .btn.danger { color:var(--danger); }
+  .btn.sm { padding:3px 9px; font-size:12px; }
+  .chip { display:inline-flex; align-items:center; gap:4px; padding:1px 8px; border-radius:999px; background:var(--chip); color:var(--chip-text); font-size:12px; white-space:nowrap; }
+  .chip.accent { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  select, input[type=search], input[type=text] { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:6px 10px; min-width:0; }
+
+  .play { width:32px; height:32px; flex:none; border-radius:50%; border:1px solid var(--line); background:var(--surface); display:inline-flex; align-items:center; justify-content:center; font-size:11px; padding:0; }
+  .play:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+  .play.playing { background:var(--accent); border-color:var(--accent); color:var(--accent-text); }
+
+  .switch { position:relative; display:inline-block; width:36px; height:20px; flex:none; }
+  .switch input { position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; z-index:1; }
+  .switch span { position:absolute; inset:0; background:var(--line); border-radius:20px; transition:.15s; }
+  .switch span:before { content:""; position:absolute; width:14px; height:14px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.15s; box-shadow:0 1px 2px rgba(0,0,0,.2); }
+  .switch input:checked + span { background:var(--accent); }
+  .switch input:checked + span:before { transform:translateX(16px); }
+  .switch input:disabled { cursor:wait; }
+  .switch input:focus-visible + span { outline:2px solid var(--accent); outline-offset:2px; }
+  .switch-label { display:inline-flex; align-items:center; gap:8px; cursor:pointer; }
+
+  /* library */
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:12px; }
+  .pack-card { padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .pack-card .top { display:flex; gap:10px; align-items:flex-start; }
+  .pack-card .name { font-weight:600; }
+  .pack-card .bottom { display:flex; gap:6px; margin-top:auto; flex-wrap:wrap; }
+  .pack-card.add { align-items:center; justify-content:center; text-align:center; border-style:dashed; color:var(--dim); text-decoration:none; min-height:140px; }
+  .pack-card.add:hover { color:var(--text); border-color:var(--accent); }
+
+  /* tools */
+  .rows > * { border-bottom:1px solid var(--line); }
+  .rows > *:last-child { border-bottom:none; }
+  .tool { display:flex; align-items:center; gap:12px; padding:12px 14px; flex-wrap:wrap; }
+  .tool .who { flex:1 1 200px; min-width:0; }
+  .tool .who .t { font-weight:600; }
+  .tool select { flex:0 1 260px; }
+  .tool.default { background:var(--surface-2); border-radius:12px 12px 0 0; }
+  .seen { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--accent); margin-left:6px; vertical-align:middle; }
+  .note { margin-top:12px; font-size:12px; color:var(--dim); }
+
+  /* editor */
+  .toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .toolbar input[type=search] { flex:1 1 220px; }
+  .event { margin-bottom:12px; overflow:hidden; }
+  .event.drop { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .event-head { display:flex; align-items:center; gap:12px; padding:12px 14px; flex-wrap:wrap; }
+  .event-head .t { font-weight:600; }
+  .event-head .count { margin-left:auto; font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums; }
+  .event.off .sound-list { opacity:.5; }
+  .banner { padding:8px 14px; font-size:12px; color:var(--warn); background:var(--warn-soft); border-top:1px solid var(--line); }
+  .empty { padding:14px; color:var(--dim); font-size:12px; border-top:1px solid var(--line); }
+  .sound { display:flex; align-items:center; gap:12px; padding:8px 14px; border-top:1px solid var(--line); }
+  .sound[draggable=true] { cursor:grab; }
+  .sound.dragging { opacity:.4; }
+  .sound.drop-before { box-shadow:inset 0 3px 0 var(--accent); }
+  .sound.drop-after { box-shadow:inset 0 -3px 0 var(--accent); }
+  .sound.off .info { opacity:.5; }
+  .sound .info { flex:1; min-width:0; }
+  .sound .label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sound .file { font-size:12px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sound .moved { background:var(--moved); color:var(--moved-text); }
+  .sound .missing { background:var(--warn-soft); color:var(--warn); }
+  .sound select.move { width:34px; padding:4px; color:var(--dim); flex:none; appearance:none; -webkit-appearance:none; text-align:center; background:var(--surface); cursor:pointer; }
+  .grip { color:var(--dim); opacity:.5; user-select:none; flex:none; }
+
+  /* browse */
+  .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .filters input[type=search] { flex:1 1 260px; }
+  .lang-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .lang-chips button { border:1px solid var(--line); background:var(--surface); border-radius:999px; padding:2px 10px; font-size:12px; }
+  .lang-chips button.on { background:var(--accent); border-color:var(--accent); color:var(--accent-text); }
+  .entry { display:flex; gap:12px; align-items:flex-start; padding:12px 14px; }
+  .entry .info { flex:1; min-width:0; }
+  .entry .t { font-weight:600; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .entry .desc { color:var(--dim); font-size:12px; margin-top:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .entry .meta { font-size:12px; color:var(--dim); margin-top:4px; }
+  .entry .act { flex:none; display:flex; flex-direction:column; gap:6px; align-items:stretch; min-width:104px; }
+  .more { padding:12px 14px; text-align:center; }
+  .spinner { display:inline-block; width:12px; height:12px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:spin .7s linear infinite; vertical-align:-2px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+
+  /* notifications */
+  .notif { display:grid; grid-template-columns:minmax(0, 1fr) 380px; gap:16px; align-items:start; }
+  .notif .preview-col { position:sticky; top:76px; }
+  .notif.disabled .settings { opacity:.5; pointer-events:none; }
+  .group { padding:14px; }
+  .group + .group { border-top:1px solid var(--line); }
+  .group h3 { margin:0 0 10px; font-size:13px; }
+  .field { display:flex; align-items:center; gap:12px; padding:6px 0; flex-wrap:wrap; }
+  .field > label:first-child, .field > .lbl { flex:0 0 150px; color:var(--dim); }
+  .field input[type=text] { flex:1 1 200px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button { border:none; background:var(--surface); padding:6px 12px; }
+  .seg button + button { border-left:1px solid var(--line); }
+  .seg button.on { background:var(--accent); color:var(--accent-text); font-weight:600; }
+  .themes { display:flex; gap:8px; flex-wrap:wrap; }
+  .theme { width:84px; border:2px solid var(--line); border-radius:10px; padding:6px; background:var(--surface); text-align:center; font-size:12px; }
+  .theme.on { border-color:var(--accent); }
+  .theme .sw { height:30px; border-radius:6px; margin-bottom:4px; }
+  .pos-grid { display:grid; grid-template-columns:repeat(3, 34px); grid-template-rows:repeat(2, 24px); gap:4px; padding:6px; border:1px solid var(--line); border-radius:8px; background:var(--surface-2); }
+  .pos-grid button { border:1px solid var(--line); background:var(--surface); border-radius:4px; padding:0; }
+  .pos-grid button.on { background:var(--accent); border-color:var(--accent); }
+  .tpl { display:flex; flex-direction:column; gap:4px; padding:6px 0; }
+  .tpl label { font-size:12px; color:var(--dim); }
+  .vars { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .vars button { border:1px dashed var(--line); background:none; border-radius:6px; padding:1px 6px; font-size:12px; font-family:ui-monospace, Menlo, monospace; color:var(--dim); }
+  .vars button:hover { color:var(--text); border-color:var(--accent); }
+  .map { position:relative; aspect-ratio:1512/982; border-radius:8px; overflow:hidden; border:4px solid #26292f;
+         background:linear-gradient(135deg, #3b4a6b, #6b4a7a 55%, #c47a6b); margin:0 auto 12px; max-width:360px; }
+  .map .mb { position:absolute; inset:0 0 auto 0; height:2.44%; background:rgba(0,0,0,.35); }
+  .map .spot { position:absolute; border-radius:3px; box-shadow:0 1px 4px rgba(0,0,0,.35); }
+  .stage { position:relative; overflow:hidden; border-radius:10px; padding:14px 0;
+           background:linear-gradient(135deg, #3b4a6b, #6b4a7a 55%, #c47a6b); display:flex; justify-content:center; }
+  .stage > .fit { transform-origin:top center; }
+  .pv-note { margin:10px 0 0; font-size:12px; color:var(--dim); }
+  .pv-empty { color:#fff; opacity:.85; font-size:12px; padding:24px 16px; text-align:center; }
+
+  /* Classic overlay (scripts/mac-overlay.js): 500×80, solid colour, icon, centred text */
+  .ov-classic { position:relative; width:500px; height:80px; border-radius:12px; opacity:.95; color:#fff;
+                font-family:-apple-system, BlinkMacSystemFont, sans-serif; }
+  .ov-classic img { position:absolute; left:10px; top:10px; width:60px; height:60px; object-fit:contain; }
+  .ov-classic .t { position:absolute; left:10px; right:20px; top:18px; text-align:center; font-weight:700; font-size:16px; line-height:23px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ov-classic.icon .t, .ov-classic.icon .s { left:75px; }
+  .ov-classic .s { position:absolute; left:10px; right:20px; top:43px; text-align:center; font-size:12px; line-height:18px; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ov-classic .hint { position:absolute; right:8px; bottom:7px; font-size:10px; opacity:.6; }
+
+  /* Glass (mac-overlay-glass.js): 340×120 ink card, accent bar, type label */
+  .ov-glass { position:relative; width:340px; height:120px; border-radius:16px; background:rgba(26,26,36,.88); border:1px solid rgba(255,255,255,.10);
+              box-shadow:0 3px 20px rgba(0,0,0,.3); font-family:"Helvetica Neue", Helvetica, sans-serif; box-sizing:border-box; }
+  .ov-glass .gbar { position:absolute; left:11px; top:24px; bottom:24px; width:3px; border-radius:2px; }
+  .ov-glass .type { position:absolute; left:24px; top:26px; font-size:10px; font-weight:700; opacity:.7; }
+  .ov-glass .t { position:absolute; left:24px; right:26px; top:40px; font-size:13px; color:rgba(242,242,242,.9); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ov-glass .s { position:absolute; left:24px; right:46px; top:62px; font-size:10px; line-height:13px; color:rgba(179,191,217,.55); }
+  .ov-glass .ts { position:absolute; left:24px; bottom:10px; font-size:10px; color:rgba(153,153,153,.5); }
+
+  /* Sakura (mac-overlay-sakura.js): 320×140 sumi-ink card, 桜, bonsai, falling petals */
+  .ov-sakura { position:relative; width:320px; height:140px; border-radius:20px; background:rgba(20,15,18,.92); border:1px solid rgba(255,184,196,.1);
+               overflow:hidden; font-family:"Helvetica Neue", Helvetica, sans-serif; box-sizing:border-box; text-shadow:0 1px 4px #000; }
+  .ov-sakura .kanji { position:absolute; left:0; right:0; top:14px; text-align:center; font-size:20px; font-family:"Hiragino Sans", sans-serif; }
+  .ov-sakura .type { position:absolute; left:0; right:0; top:46px; text-align:center; font-size:8px; font-weight:300; opacity:.5; letter-spacing:.3px; }
+  .ov-sakura .t { position:absolute; left:30px; right:30px; top:84px; text-align:center; font-size:12px; font-weight:100; color:rgba(250,245,237,.9); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ov-sakura .s { position:absolute; left:50px; right:50px; top:102px; text-align:center; font-size:10px; font-weight:100; color:rgba(217,199,204,.5); }
+  .ov-sakura svg.bonsai { position:absolute; right:0; bottom:0; width:120px; height:130px; }
+  .ov-sakura .petal { position:absolute; top:-10px; width:6px; height:4px; border-radius:60% 40% 60% 40%; background:rgba(255,184,196,.5); animation:petal linear infinite; }
+  @keyframes petal { to { transform:translate(-70px, 170px) rotate(300deg); } }
+
+  /* Jarvis (mac-overlay-jarvis.js): 300px HUD circle */
+  .ov-jarvis { position:relative; width:300px; height:300px; font-family:"Avenir Next", Avenir, sans-serif; text-shadow:0 1px 4px #000; }
+  .ov-jarvis svg { position:absolute; inset:0; overflow:visible; }
+  .ov-jarvis .spin { transform-origin:150px 150px; animation:spin 14s linear infinite; }
+  .ov-jarvis .spin.rev { animation-direction:reverse; animation-duration:22s; }
+  .ov-jarvis .txt { position:absolute; left:40px; right:40px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ov-x { position:absolute; font-weight:700; font-size:16px; line-height:22px; width:22px; text-align:center; }
+
+  .progress { position:absolute; left:16px; bottom:8px; height:1px; width:0; }
+  .progress.run { animation:grow linear infinite; }
+  @keyframes grow { from { width:0; } to { width:calc(100% - 32px); } }
+
+  /* macOS notification (terminal-notifier) */
+  .ov-mac { width:344px; border-radius:16px; padding:11px 12px; display:flex; gap:10px; align-items:flex-start; box-sizing:border-box;
+            background:rgba(246,246,246,.86); color:#1d1d1f; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+            box-shadow:0 6px 18px rgba(0,0,0,.18); font:13px/1.3 -apple-system, BlinkMacSystemFont, sans-serif; }
+  .ov-mac img { width:32px; height:32px; object-fit:contain; flex:none; }
+  .ov-mac .body { flex:1; min-width:0; }
+  .ov-mac .row1 { display:flex; gap:8px; }
+  .ov-mac .row1 b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ov-mac .when { color:rgba(60,60,67,.6); font-size:12px; }
+  .ov-mac .sub { font-weight:600; }
+  @media (prefers-color-scheme: dark) { .ov-mac { background:rgba(40,40,44,.86); color:#f5f5f7; } .ov-mac .when { color:rgba(235,235,245,.6); } }
+  @media (max-width:860px) { .notif { grid-template-columns:1fr; } .notif .preview-col { position:static; order:-1; } }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:10; display:none; align-items:center; gap:12px; max-width:calc(100% - 32px);
+           background:var(--text); color:var(--bg); padding:10px 14px; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.2); }
+  #toast.err { background:var(--danger); color:#fff; }
+  #toast button { background:none; border:1px solid currentColor; color:inherit; border-radius:6px; padding:2px 8px; font-size:12px; }
+  .loading { padding:32px; text-align:center; color:var(--dim); }
+
+  @media (max-width:640px) {
+    .global { margin-left:0; width:100%; justify-content:space-between; }
+    .vol input { width:100px; }
+    .entry { flex-wrap:wrap; }
+    .entry .act { flex-direction:row; min-width:0; margin-left:44px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand"><img src="/favicon.png" alt="" width="22" height="22" onerror="this.remove()">peon-editor</div>
+    <nav id="nav">
+      <a href="#/packs" data-tab="packs">My packs</a>
+      <a href="#/tools" data-tab="tools">Tools</a>
+      <a href="#/notifications" data-tab="notifications">Notifications</a>
+      <a href="#/browse" data-tab="browse">Get packs</a>
+    </nav>
+    <div class="global">
+      <label class="switch-label" title="Mute or unmute every peon-ping sound">
+        <span class="switch"><input type="checkbox" id="soundsOn"><span></span></span>
+        <span id="soundsText">Sounds on</span>
+      </label>
+      <div class="vol" title="Volume">
+        <span aria-hidden="true">🔉</span>
+        <input type="range" id="volume" min="0" max="100" step="1" aria-label="Volume">
+        <output id="volumeOut"></output>
+      </div>
+    </div>
+  </div>
+</header>
+<main id="view"><div class="loading">Loading…</div></main>
+<div id="toast" role="status"></div>
+
+<script>
+const EVENTS = {
+  'session.start':   { title: 'Session start',     hint: 'A new agent session opens' },
+  'task.acknowledge':{ title: 'Prompt received',   hint: 'The agent starts working on your prompt' },
+  'task.complete':   { title: 'Task done',         hint: 'The agent finished and is waiting for you' },
+  'task.error':      { title: 'Error',             hint: 'A tool call failed' },
+  'input.required':  { title: 'Needs your input',  hint: 'Permission request or a question for you' },
+  'resource.limit':  { title: 'Limit reached',     hint: 'Usage or context limit hit' },
+  'user.spam':       { title: 'Too many prompts',  hint: 'You sent several prompts in a row' },
+};
+// Languages kept out of the quick chips even when the browser lists them; still reachable via "Other…"
+const TUCKED_LANGS = ['ru'];
+const eventTitle = (name) => (EVENTS[name] || {}).title || name;
+
+const $ = (s, root = document) => root.querySelector(s);
+const el = (tag, props = {}, ...children) => {
+  const node = Object.assign(document.createElement(tag), props);
+  for (const c of children.flat()) if (c != null && c !== false) node.append(c);
+  return node;
+};
+
+const store = { packs: [], tools: null, status: null, registry: null, pack: null };
+
+/* ---------- helpers ---------- */
+async function getJson(url) {
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || data.message || 'Request failed');
+  return data;
+}
+async function post(route, body) {
+  const res = await fetch(route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  try { return await res.json(); } catch { return { ok: false, message: 'Request failed' }; }
+}
+function toast(msg, { error = false, action } = {}) {
+  const t = $('#toast');
+  t.replaceChildren(el('span', { textContent: msg }));
+  if (action) t.append(el('button', { textContent: action.label, onclick: () => { t.style.display = 'none'; action.run(); } }));
+  t.className = error ? 'err' : '';
+  t.style.display = 'flex';
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (t.style.display = 'none'), action ? 7000 : 3500);
+}
+function done(data, okMsg) {
+  if (!data.ok) toast(data.message || 'Something went wrong', { error: true });
+  else if (okMsg) toast(okMsg);
+  return data.ok;
+}
+const packTitle = (name) => (store.packs.find((p) => p.name === name) || {}).display_name || name;
+const toolName = (id) => id === 'default' ? 'Default' : ((store.tools && [...store.tools.tools, ...store.tools.known].find((t) => t.id === id)) || {}).name || id;
+function formatSize(bytes) {
+  if (!bytes) return '';
+  return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+}
+function switchEl(checked, onchange, label) {
+  const input = el('input', { type: 'checkbox', checked, onchange: () => onchange(input) });
+  if (label) input.setAttribute('aria-label', label);
+  return el('span', { className: 'switch' }, input, el('span'));
+}
+
+/* ---------- audio ---------- */
+const player = { audio: null, btn: null };
+function stopAudio() {
+  if (player.audio) player.audio.pause();
+  if (player.btn) { player.btn.classList.remove('playing'); player.btn.textContent = '▶'; }
+  player.audio = player.btn = null;
+}
+function playBtn(getSrc, title = 'Play') {
+  const btn = el('button', { className: 'play', textContent: '▶', title });
+  btn.setAttribute('aria-label', title);
+  btn.onclick = async (e) => {
+    e.stopPropagation();
+    const same = player.btn === btn;
+    stopAudio();
+    if (same) return;
+    const src = await getSrc();
+    if (!src) { toast('Nothing to play', { error: true }); return; }
+    player.audio = new Audio(src);
+    player.audio.volume = store.status ? Math.max(0.05, store.status.volume) : 1;
+    player.btn = btn;
+    btn.classList.add('playing');
+    btn.textContent = '■';
+    player.audio.onended = stopAudio;
+    player.audio.play().catch(() => { stopAudio(); toast('Could not play this sound', { error: true }); });
+  };
+  return btn;
+}
+const localSrc = (pack, path) => '/audio?pack=' + encodeURIComponent(pack) + '&path=' + encodeURIComponent(path);
+async function sampleOf(pack) {
+  const state = await getJson('/api/pack?name=' + encodeURIComponent(pack));
+  for (const cat of ['task.complete', 'session.start', 'input.required', 'task.acknowledge']) {
+    const c = state.categories.find((x) => x.name === cat);
+    const s = c && c.sounds.find((x) => x.enabled && !x.missing);
+    if (s) return localSrc(pack, s.path);
+  }
+  return null;
+}
+
+/* ---------- data ---------- */
+async function refreshCore() {
+  [store.packs, store.tools, store.status] = await Promise.all([getJson('/api/packs'), getJson('/api/tools'), getJson('/api/status')]);
+  renderGlobal();
+}
+
+/* ---------- global controls ---------- */
+function renderGlobal() {
+  const s = store.status;
+  $('#soundsOn').checked = s.sounds_on;
+  $('#soundsText').textContent = s.sounds_on ? 'Sounds on' : 'Muted';
+  document.body.classList.toggle('muted', !s.sounds_on);
+  $('#volume').value = Math.round(s.volume * 100);
+  $('#volumeOut').textContent = Math.round(s.volume * 100) + '%';
+}
+$('#soundsOn').onchange = async (e) => {
+  const on = e.target.checked;
+  e.target.disabled = true;
+  const ok = done(await post('/api/sounds', { on }), on ? 'Sounds on' : 'Muted');
+  e.target.disabled = false;
+  if (ok) store.status.sounds_on = on;
+  renderGlobal();
+};
+$('#volume').oninput = (e) => ($('#volumeOut').textContent = e.target.value + '%');
+$('#volume').onchange = async (e) => {
+  const volume = Number(e.target.value) / 100;
+  if (done(await post('/api/volume', { volume }))) {
+    store.status.volume = volume;
+    const src = await sampleOf(store.status.default_pack).catch(() => null);
+    if (src && volume > 0) { stopAudio(); const a = new Audio(src); a.volume = volume; a.play().catch(() => {}); }
+  }
+  renderGlobal();
+};
+
+/* ---------- views ---------- */
+function setTab(tab) {
+  for (const a of document.querySelectorAll('#nav a')) a.classList.toggle('active', a.dataset.tab === tab);
+}
+
+function viewPacks() {
+  setTab('packs');
+  const def = store.status.default_pack;
+  const cards = store.packs.map((p) => {
+    const chips = [];
+    if (p.name === def) chips.push(el('span', { className: 'chip accent', textContent: 'Default' }));
+    for (const id of p.used_by.filter((u) => u !== 'default')) chips.push(el('span', { className: 'chip', textContent: toolName(id) }));
+    return el('div', { className: 'card pack-card' },
+      el('div', { className: 'top' },
+        playBtn(() => sampleOf(p.name), 'Play a sample'),
+        el('div', {}, el('div', { className: 'name', textContent: p.display_name }), el('div', { className: 'small dim', textContent: p.name + ' · ' + p.sound_count + ' sounds' }))),
+      chips.length ? el('div', { className: 'chips' }, chips) : el('div', { className: 'small dim', textContent: 'Not used by any tool' }),
+      el('div', { className: 'bottom' },
+        el('a', { className: 'btn sm primary', href: '#/pack/' + encodeURIComponent(p.name), textContent: 'Edit sounds', style: 'text-decoration:none' }),
+        p.name !== def ? el('button', { className: 'btn sm', textContent: 'Make default', onclick: () => makeDefault(p.name) }) : null,
+        p.name !== def ? el('button', { className: 'btn sm ghost danger', textContent: 'Remove', onclick: () => removePack(p.name, p.display_name) }) : null));
+  });
+  cards.push(el('a', { className: 'card pack-card add', href: '#/browse' }, el('div', { style: 'font-size:24px' }, '＋'), el('div', {}, 'Get more packs'), el('div', { className: 'small' }, '370+ in the registry')));
+  return [
+    el('div', { className: 'page-head' }, el('div', {}, el('h1', { textContent: 'My packs' }), el('p', { textContent: store.packs.length + ' installed. The default pack plays everywhere a tool has no pack of its own.' }))),
+    el('div', { className: 'grid' }, cards),
+  ];
+}
+
+function viewTools() {
+  setTab('tools');
+  const t = store.tools;
+  const packOptions = (selected, withDefault) => {
+    const sel = el('select');
+    if (withDefault) sel.append(el('option', { value: '', textContent: 'Default — ' + packTitle(t.default_pack) }));
+    for (const p of store.packs) sel.append(el('option', { value: p.name, textContent: p.display_name }));
+    if (selected && !store.packs.some((p) => p.name === selected)) sel.append(el('option', { value: selected, textContent: selected + ' (not installed)' }));
+    sel.value = selected;
+    return sel;
+  };
+
+  const defSel = packOptions(t.default_pack, false);
+  defSel.onchange = () => makeDefault(defSel.value);
+  const rows = [el('div', { className: 'tool default' },
+    el('div', { className: 'who' }, el('div', { className: 't', textContent: 'Default pack' }), el('div', { className: 'small dim', textContent: 'Used by every tool below set to “Default”' })),
+    playBtn(() => sampleOf(defSel.value), 'Play a sample'),
+    defSel)];
+
+  for (const tool of t.tools) {
+    const sel = packOptions(tool.pack, true);
+    sel.setAttribute('aria-label', 'Pack for ' + tool.name);
+    sel.onchange = async () => {
+      if (done(await post('/api/tools', { tool: tool.id, pack: sel.value }), tool.name + ' → ' + (sel.value ? packTitle(sel.value) : 'default pack'))) await refreshCore();
+      route();
+    };
+    const who = el('div', { className: 'who' }, el('div', { className: 't' }, tool.name, tool.seen ? el('span', { className: 'seen', title: 'peon-ping has received events from this tool' }) : null), el('div', { className: 'small dim mono', textContent: tool.id }));
+    rows.push(el('div', { className: 'tool' }, who, playBtn(() => sampleOf(sel.value || t.default_pack), 'Play a sample'), sel));
+  }
+
+  if (t.known.length) {
+    const sel = el('select', {}, t.known.map((k) => el('option', { value: k.id, textContent: k.name })));
+    const add = el('button', { className: 'btn', textContent: 'Add tool', onclick: async () => {
+      if (done(await post('/api/tools', { tool: sel.value, pack: t.default_pack }))) { await refreshCore(); route(); }
+    } });
+    rows.push(el('div', { className: 'tool' }, el('div', { className: 'who' }, el('div', { className: 't dim', textContent: 'Another tool' })), sel, add));
+  }
+
+  return [
+    el('div', { className: 'page-head' }, el('div', {}, el('h1', { textContent: 'Which pack plays where' }), el('p', { textContent: 'Give each coding tool its own voice. A green dot means peon-ping has heard from that tool recently.' }))),
+    el('div', { className: 'card rows' }, rows),
+    el('p', { className: 'note', textContent: 'Order peon-ping uses: a pack picked for one chat (/peon-ping-use) → folder rules → this tool list → rotation → default pack.' }),
+  ];
+}
+
+async function viewPack(name) {
+  setTab('packs');
+  store.pack = await getJson('/api/pack?name=' + encodeURIComponent(name));
+  const p = store.pack;
+  const info = store.packs.find((x) => x.name === name) || { used_by: [] };
+  const isDefault = store.status.default_pack === name;
+  const search = el('input', { type: 'search', placeholder: 'Find a sound…' });
+  const onlyOn = el('select', {}, el('option', { value: '', textContent: 'All sounds' }), el('option', { value: 'on', textContent: 'Enabled only' }), el('option', { value: 'off', textContent: 'Disabled only' }));
+  const list = el('div');
+  const renderList = () => list.replaceChildren(...renderEvents(p, search.value.trim().toLowerCase(), onlyOn.value));
+  search.oninput = renderList;
+  onlyOn.onchange = renderList;
+  renderList();
+
+  const chips = [];
+  if (isDefault) chips.push(el('span', { className: 'chip accent', textContent: 'Default' }));
+  for (const id of info.used_by.filter((u) => u !== 'default')) chips.push(el('span', { className: 'chip', textContent: toolName(id) }));
+
+  return [
+    el('div', { className: 'small', style: 'margin-bottom:8px' }, el('a', { href: '#/packs', className: 'dim', textContent: '← My packs' })),
+    el('div', { className: 'page-head' },
+      el('div', {}, el('h1', { textContent: p.display_name }), el('p', {}, el('span', { className: 'mono', textContent: p.name }), chips.length ? ' · ' : '', ...chips.flatMap((c) => [c, ' ']))),
+      el('div', { className: 'actions' }, isDefault ? null : el('button', { className: 'btn', textContent: 'Make default', onclick: () => makeDefault(name) }))),
+    el('div', { className: 'toolbar' }, search, onlyOn, el('span', { className: 'small dim', textContent: 'Tip: drag sounds to reorder them or move them to another event; ⇄ moves without dragging' })),
+    list,
+  ];
+}
+
+function renderEvents(p, q, only) {
+  const sections = [];
+  for (const cat of p.categories) {
+    const sounds = cat.sounds.filter((s) =>
+      (!q || s.file.toLowerCase().includes(q) || s.label.toLowerCase().includes(q)) &&
+      (!only || (only === 'on') === s.enabled));
+    if ((q || only) && !sounds.length) continue;
+    const on = cat.sounds.filter((s) => s.enabled).length;
+    const section = el('section', { className: 'card event' + (cat.category_enabled ? '' : ' off') });
+
+    const head = el('div', { className: 'event-head' },
+      switchEl(cat.category_enabled, async (input) => {
+        input.disabled = true;
+        if (done(await post('/api/event', { category: cat.name, enabled: input.checked }), eventTitle(cat.name) + (input.checked ? ' on' : ' off') + ' for all packs')) cat.category_enabled = input.checked;
+        else input.checked = !input.checked;
+        input.disabled = false;
+        section.classList.toggle('off', !cat.category_enabled);
+        section.querySelector('.banner-off')?.remove();
+        if (!cat.category_enabled) head.after(offBanner());
+      }, 'Event ' + eventTitle(cat.name)),
+      el('div', {}, el('div', { className: 't', textContent: eventTitle(cat.name) }), el('div', { className: 'small dim' }, (EVENTS[cat.name] || {}).hint || cat.hint, ' · ', el('span', { className: 'mono', textContent: cat.name }))),
+      el('span', { className: 'count', textContent: cat.sounds.length ? on + ' of ' + cat.sounds.length + ' on' : '' }),
+      cat.sounds.length ? el('button', { className: 'btn sm ghost', textContent: on === cat.sounds.length ? 'Turn all off' : 'Turn all on', onclick: () => setAll(cat, on !== cat.sounds.length) }) : null);
+    section.append(head);
+    if (!cat.category_enabled) section.append(offBanner());
+    else if (cat.sounds.length && on === 0) section.append(el('div', { className: 'banner', textContent: 'All sounds are off — this event will be silent.' }));
+
+    const listEl = el('div', { className: 'sound-list' });
+    if (!cat.sounds.length) listEl.append(el('div', { className: 'empty', textContent: 'No sounds yet. Drag one here or use ⇄ on any sound.' }));
+    for (const s of sounds) listEl.append(renderSound(p, cat, s));
+    section.append(listEl);
+    makeDropTarget(section, cat);
+    sections.push(section);
+  }
+  if (!sections.length) sections.push(el('div', { className: 'loading', textContent: 'No sounds match.' }));
+  return sections;
+}
+
+function offBanner() {
+  return el('div', { className: 'banner banner-off', textContent: 'This event is off for every pack, so none of these sounds will play.' });
+}
+
+function renderSound(p, cat, s) {
+  const row = el('div', { className: 'sound' + (s.enabled ? '' : ' off'), draggable: true });
+  row.dataset.file = s.file;
+  const chips = [];
+  if (s.moved_from) chips.push(el('span', { className: 'chip moved', title: 'Moved here by you' }, 'from ' + eventTitle(s.moved_from), el('button', { className: 'btn ghost sm', style: 'padding:0 2px', textContent: '↺', title: 'Move back to ' + eventTitle(s.moved_from), onclick: () => move(s, cat.name, s.moved_from) })));
+  if (s.missing) chips.push(el('span', { className: 'chip missing', textContent: 'file missing', title: 'Not downloaded. Reinstall the pack to fetch it.' }));
+
+  const moveSel = el('select', { className: 'move', title: 'Move to another event' }, el('option', { value: '', textContent: '⇄' }));
+  moveSel.setAttribute('aria-label', 'Move ' + s.file + ' to another event');
+  for (const other of p.categories) if (other.name !== cat.name) moveSel.append(el('option', { value: other.name, textContent: '→ ' + eventTitle(other.name) }));
+  moveSel.onchange = () => moveSel.value && move(s, cat.name, moveSel.value);
+
+  const play = playBtn(() => localSrc(p.name, s.path));
+  if (s.missing) play.disabled = true;
+  row.append(
+    el('span', { className: 'grip', textContent: '⋮⋮', title: 'Drag to another event' }),
+    play,
+    el('div', { className: 'info' }, el('div', { className: 'label', textContent: s.label || s.file }), el('div', { className: 'file' }, el('span', { className: 'mono', textContent: s.file }), chips.length ? ' ' : '', ...chips.flatMap((c) => [c, ' ']))),
+    moveSel,
+    switchEl(s.enabled, async (input) => {
+      input.disabled = true;
+      const ok = done(await post('/api/toggle', { pack: p.name, category: cat.name, file: s.file, enabled: input.checked }));
+      input.disabled = false;
+      if (ok) { s.enabled = input.checked; route(); } else input.checked = !input.checked;
+    }, (s.enabled ? 'Disable ' : 'Enable ') + s.file));
+
+  row.addEventListener('dragstart', (e) => {
+    drag = { sound: s, from: cat.name };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', s.file);
+    row.classList.add('dragging');
+  });
+  row.addEventListener('dragend', () => {
+    drag = null;
+    row.classList.remove('dragging');
+    document.querySelectorAll('.event.drop').forEach((x) => x.classList.remove('drop'));
+  });
+  return row;
+}
+
+let drag = null;
+let dropAt = null;
+function makeDropTarget(section, cat) {
+  const clear = () => section.querySelectorAll('.drop-before, .drop-after').forEach((r) => r.classList.remove('drop-before', 'drop-after'));
+  section.addEventListener('dragover', (e) => {
+    if (!drag) return;
+    const other = drag.from !== cat.name;
+    if (other && cat.sounds.some((x) => x.file === drag.sound.file)) return; // already plays on this event
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    section.classList.toggle('drop', other);
+    clear();
+    const rows = [...section.querySelectorAll('.sound')];
+    const row = e.target.closest('.sound');
+    if (row && row.dataset.file === drag.sound.file) { dropAt = null; return; }
+    if (row) {
+      const r = row.getBoundingClientRect();
+      const above = e.clientY < r.top + r.height / 2;
+      row.classList.add(above ? 'drop-before' : 'drop-after');
+      const next = above ? row : rows[rows.indexOf(row) + 1];
+      dropAt = { before: next ? next.dataset.file : '' };
+    } else {
+      // Over the header or empty space: append, and show the line under the last row
+      const last = rows.filter((r) => r.dataset.file !== drag.sound.file).pop();
+      if (last) last.classList.add('drop-after');
+      dropAt = { before: '' };
+    }
+  });
+  section.addEventListener('dragleave', (e) => {
+    if (section.contains(e.relatedTarget)) return;
+    section.classList.remove('drop');
+    clear();
+  });
+  section.addEventListener('drop', (e) => {
+    e.preventDefault();
+    section.classList.remove('drop');
+    clear();
+    if (drag && dropAt) move(drag.sound, drag.from, cat.name, dropAt.before);
+    dropAt = null;
+  });
+}
+
+async function move(sound, from, to, before = '') {
+  if (from === to && before === sound.file) return;
+  const data = await post('/api/move', { pack: store.pack.name, file: sound.file, from, to, before });
+  done(data, from === to ? '' : (sound.label || sound.file) + ' → ' + eventTitle(to));
+  route();
+}
+
+async function setAll(cat, enabled) {
+  for (const s of cat.sounds) {
+    if (s.enabled === enabled) continue;
+    const data = await post('/api/toggle', { pack: store.pack.name, category: cat.name, file: s.file, enabled });
+    if (!done(data)) break;
+  }
+  route();
+}
+
+async function makeDefault(name) {
+  if (done(await post('/api/default', { pack: name }), packTitle(name) + ' is now the default pack')) await refreshCore();
+  route();
+}
+
+async function removePack(name, title) {
+  if (!confirm('Remove “' + title + '”? Its sound files are deleted; you can install it again from Get packs.')) return;
+  const data = await post('/api/remove', { pack: name });
+  if (done(data, 'Removed ' + title)) {
+    await refreshCore();
+    if (store.registry) for (const r of store.registry) if (r.name === name) r.installed = false;
+  }
+  route();
+}
+
+/* ---------- browse ---------- */
+const browse = { q: '', lang: '', show: '', limit: 40, busy: new Set() };
+
+async function viewBrowse() {
+  setTab('browse');
+  if (!store.registry) store.registry = await getJson('/api/registry');
+  const reg = store.registry;
+  const counts = {};
+  for (const p of reg) for (const l of String(p.language || '?').split(/[,\s]+/).filter(Boolean)) counts[l] = (counts[l] || 0) + 1;
+  const langs = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+  const search = el('input', { type: 'search', placeholder: 'Search by name, game, tag… e.g. memes, starcraft', value: browse.q });
+  const show = el('select', {}, el('option', { value: '', textContent: 'All packs' }), el('option', { value: 'new', textContent: 'Not installed' }), el('option', { value: 'installed', textContent: 'Installed' }));
+  show.value = browse.show;
+  const chipBox = el('div', { className: 'lang-chips' });
+  const list = el('div', { className: 'card rows' });
+
+  // The viewer's own languages first, then the most common ones; the rest go into a dropdown
+  const mine = [...new Set((navigator.languages || [navigator.language]).map((l) => String(l).toLowerCase().split('-')[0]))].filter((l) => counts[l]);
+  const top = [...mine, ...langs.map(([l]) => l).filter((l) => !mine.includes(l))].filter((l) => !TUCKED_LANGS.includes(l)).slice(0, 10);
+  const setLang = (l) => { browse.lang = l; browse.limit = 40; renderChips(); renderList(); };
+  const renderChips = () => {
+    const rest = langs.filter(([l]) => !top.includes(l));
+    const other = el('select', { className: 'small', onchange: () => setLang(other.value) },
+      el('option', { value: '', textContent: 'Other…' }), rest.map(([l, n]) => el('option', { value: l, textContent: l + ' (' + n + ')' })));
+    other.value = rest.some(([l]) => l === browse.lang) ? browse.lang : '';
+    chipBox.replaceChildren(
+      el('button', { className: browse.lang ? '' : 'on', textContent: 'All languages', onclick: () => setLang('') }),
+      ...top.map((l) => el('button', { className: browse.lang === l ? 'on' : '', textContent: l + ' ' + counts[l], onclick: () => setLang(l) })),
+      rest.length ? other : null);
+  };
+
+  const renderList = () => {
+    const q = browse.q.toLowerCase();
+    const matches = reg.filter((p) =>
+      (!browse.lang || String(p.language).split(/[,\s]+/).includes(browse.lang)) &&
+      (browse.show !== 'new' || !p.installed) && (browse.show !== 'installed' || p.installed) &&
+      (!q || [p.name, p.display_name, p.description, p.author, ...p.tags].join(' ').toLowerCase().includes(q)));
+    const rows = matches.slice(0, browse.limit).map(renderEntry);
+    const footer = el('div', { className: 'more small dim' }, matches.length ? 'Showing ' + rows.length + ' of ' + matches.length + ' ' : 'No packs match. ');
+    if (matches.length > browse.limit) footer.append(el('button', { className: 'btn sm', textContent: 'Show more', onclick: () => { browse.limit += 40; renderList(); } }));
+    list.replaceChildren(...rows, footer);
+  };
+  search.oninput = () => { browse.q = search.value.trim(); browse.limit = 40; renderList(); };
+  show.onchange = () => { browse.show = show.value; browse.limit = 40; renderList(); };
+  renderChips();
+  renderList();
+
+  return [
+    el('div', { className: 'page-head' }, el('div', {}, el('h1', { textContent: 'Get packs' }), el('p', { textContent: reg.length + ' packs from the peon-ping registry. Press ▶ to hear a sample before installing.' }))),
+    el('div', { className: 'filters' }, search, show),
+    chipBox,
+    list,
+  ];
+}
+
+function renderEntry(p) {
+  const tags = [el('span', { className: 'chip', textContent: p.language || '?' })];
+  if (p.tags.some((t) => /nsfw|mature|explicit/i.test(t))) tags.push(el('span', { className: 'chip missing', textContent: '18+' }));
+  if (p.installed) tags.push(el('span', { className: 'chip accent', textContent: 'Installed' }));
+
+  let next = 0;
+  const play = playBtn(() => p.previews[next++ % p.previews.length], 'Play a sample');
+  if (!p.previews.length) play.disabled = true;
+
+  const act = el('div', { className: 'act' });
+  if (browse.busy.has(p.name)) {
+    act.append(el('button', { className: 'btn', disabled: true }, el('span', { className: 'spinner' }), ' Installing'));
+  } else if (p.installed) {
+    act.append(el('a', { className: 'btn sm', href: '#/pack/' + encodeURIComponent(p.name), textContent: 'Edit sounds', style: 'text-align:center;text-decoration:none' }));
+    if (!p.is_default) act.append(el('button', { className: 'btn sm ghost danger', textContent: 'Remove', onclick: () => removePack(p.name, p.display_name) }));
+  } else {
+    act.append(el('button', { className: 'btn primary', textContent: 'Install', onclick: () => install(p) }));
+  }
+
+  return el('div', { className: 'entry' },
+    play,
+    el('div', { className: 'info' },
+      el('div', { className: 't' }, p.display_name, ...tags),
+      el('div', { className: 'desc', textContent: p.description, title: p.description }),
+      el('div', { className: 'meta', textContent: [p.name, p.sound_count + ' sounds', formatSize(p.size), p.author && 'by ' + p.author].filter(Boolean).join(' · ') })),
+    act);
+}
+
+async function install(p) {
+  browse.busy.add(p.name);
+  route();
+  const data = await post('/api/install', { pack: p.name });
+  browse.busy.delete(p.name);
+  if (data.ok) {
+    p.installed = true;
+    await refreshCore();
+    toast('Installed ' + p.display_name, { action: { label: 'Use it…', run: () => (location.hash = '#/tools') } });
+  } else {
+    toast(data.message || 'Install failed', { error: true });
+  }
+  if (location.hash.startsWith('#/browse')) route();
+}
+
+
+/* ---------- notifications ---------- */
+// What peon-ping actually sends for each pop-up (peon.sh event routing + notify.sh)
+const TEMPLATE_INFO = {
+  stop:       { title: 'Task done',        sample: 'done',                 color: 'blue',   type: 'TASK COMPLETE' },
+  permission: { title: 'Needs permission', sample: 'needs approval: Bash', color: 'red',    type: 'APPROVAL NEEDED' },
+  error:      { title: 'Error',            sample: 'error',                color: 'red',    type: '', noPopup: true },
+  idle:       { title: 'Waiting for you',  sample: 'done',                 color: 'yellow', type: 'STANDING BY' },
+  question:   { title: 'Question',         sample: 'question: Question pending', color: 'blue', type: 'INPUT REQUIRED', subtitle: 'Question pending' },
+};
+// Colours copied from each overlay script's colour switch
+const ACCENTS = {
+  neon:   { blue: 'rgb(30,80,180)',   yellow: 'rgb(200,160,0)',  red: 'rgb(180,0,0)' },
+  glass:  { blue: 'rgb(102,153,252)', yellow: 'rgb(242,191,51)', red: 'rgb(230,64,77)' },
+  sakura: { blue: 'rgb(255,184,196)', yellow: 'rgb(196,166,66)', red: 'rgb(196,31,59)' },
+  jarvis: { blue: 'rgb(0,191,255)',   yellow: 'rgb(255,204,0)',  red: 'rgb(255,64,38)' },
+};
+// "neon" is peon-ping's name for the default overlay, which is a plain coloured banner
+const THEME_INFO = {
+  neon:   { name: 'Classic', swatch: 'rgb(30,80,180)', size: [500, 80], pad: 0 },
+  glass:  { name: 'Glass',   swatch: 'linear-gradient(90deg, rgba(26,26,36,1) 0 18%, rgb(102,153,252) 18% 24%, rgba(26,26,36,1) 24%)', size: [340, 120], pad: 20 },
+  sakura: { name: 'Sakura',  swatch: 'radial-gradient(circle at 75% 70%, rgb(255,184,196) 0 18%, rgb(20,15,18) 19%)', size: [320, 140], pad: 20 },
+  jarvis: { name: 'Jarvis',  swatch: 'radial-gradient(circle, rgb(8,13,31) 0 32%, rgb(0,191,255) 33% 40%, rgb(8,13,31) 41%)', size: [300, 300], pad: 20 },
+};
+const SAMPLE_VARS = { project: 'my-app', summary: 'Refactored the login form', excerpt: 'All tests pass.', tool_name: 'Bash', status: 'done', event: 'Stop', ide: 'Claude Code', ide_id: 'claude' };
+const notif = { previewKey: 'stop' };
+
+async function saveNotif(patch, msg = 'Saved') {
+  const data = await post('/api/notifications', patch);
+  if (done(data, msg)) Object.assign(notif.data, await getJson('/api/notifications'));
+  renderNotifPreview();
+  return data.ok;
+}
+
+async function viewNotifications() {
+  setTab('notifications');
+  notif.data = await getJson('/api/notifications');
+  const n = notif.data;
+  const o = n.options;
+  let focusedTpl = null;
+
+  const seg = (values, current, labels, onpick) => {
+    const box = el('div', { className: 'seg' });
+    for (const v of values) box.append(el('button', { className: v === current ? 'on' : '', textContent: labels[v] || v, onclick: () => onpick(v) }));
+    return box;
+  };
+  const rerender = () => route();
+  const boolField = (label, key, hint) => el('div', { className: 'field' },
+    el('span', { className: 'lbl', textContent: label }),
+    switchEl(n[key], async (input) => { input.disabled = true; if (!(await saveNotif({ [key]: input.checked }))) input.checked = !input.checked; input.disabled = false; }, label),
+    hint ? el('span', { className: 'small dim', textContent: hint }) : null);
+
+  const posGrid = el('div', { className: 'pos-grid', title: 'Where the banner appears' },
+    o.positions.map((pos) => {
+      const b = el('button', { className: n.position === pos ? 'on' : '', title: pos, onclick: async () => { if (await saveNotif({ position: pos })) rerender(); } });
+      b.setAttribute('aria-label', 'Position ' + pos);
+      return b;
+    }));
+
+  const dismiss = el('select', {}, [2, 4, 6, 10, 20, 30, 60].map((sec) => el('option', { value: sec, textContent: sec + ' seconds' })), el('option', { value: 0, textContent: 'Until I click it' }));
+  if (![...dismiss.options].some((x) => Number(x.value) === n.dismiss_seconds)) dismiss.append(el('option', { value: n.dismiss_seconds, textContent: n.dismiss_seconds + ' seconds' }));
+  dismiss.value = n.dismiss_seconds;
+  dismiss.onchange = () => saveNotif({ dismiss_seconds: Number(dismiss.value) });
+
+  const themes = el('div', { className: 'themes' }, o.themes.map((t) => el('button', {
+    className: 'theme' + (n.theme === t ? ' on' : ''),
+    title: t === 'neon' ? 'Built in' : 'Downloaded from peon-ping the first time you pick it',
+    onclick: async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      if (await saveNotif({ theme: t }, THEME_INFO[t].name + ' theme')) rerender();
+      btn.disabled = false;
+    },
+  }, el('div', { className: 'sw', style: 'background:' + THEME_INFO[t].swatch }), THEME_INFO[t].name)));
+
+  const title = el('input', { type: 'text', value: n.title, placeholder: 'Project folder name (default)', maxLength: 60 });
+  title.onchange = () => saveNotif({ title: title.value });
+  title.oninput = () => { n.title = title.value; renderNotifPreview(); };
+
+  const tplFields = o.templates.map((key) => {
+    const input = el('input', { type: 'text', value: n.templates[key], placeholder: 'Default: ' + TEMPLATE_INFO[key].sample, maxLength: 200 });
+    input.onfocus = () => { focusedTpl = input; notif.previewKey = key; renderNotifPreview(); };
+    input.oninput = () => { n.templates[key] = input.value; renderNotifPreview(); };
+    input.onchange = () => saveNotif({ templates: { [key]: input.value } });
+    input.dataset.key = key;
+    return el('div', { className: 'tpl' }, el('label', { textContent: TEMPLATE_INFO[key].title }), input);
+  });
+  const vars = el('div', { className: 'vars' }, el('span', { className: 'small dim', textContent: 'Insert:' }),
+    Object.keys(SAMPLE_VARS).map((v) => el('button', { textContent: '{' + v + '}', title: 'Example: ' + SAMPLE_VARS[v], onmousedown: (e) => e.preventDefault(), onclick: () => {
+      const input = focusedTpl || tplFields[0].querySelector('input');
+      const at = input.selectionStart ?? input.value.length;
+      input.value = input.value.slice(0, at) + '{' + v + '}' + input.value.slice(input.selectionEnd ?? at);
+      input.focus();
+      input.setSelectionRange(at + v.length + 2, at + v.length + 2);
+      input.dispatchEvent(new Event('input'));
+      input.dispatchEvent(new Event('change'));
+    } })));
+
+  const overlay = n.style === 'overlay';
+  const settings = el('div', { className: 'card settings' },
+    el('div', { className: 'group' }, el('h3', { textContent: 'Look' }),
+      el('div', { className: 'field' }, el('span', { className: 'lbl', textContent: 'Style' }),
+        seg(o.styles, n.style, { overlay: 'Peon banner', standard: 'macOS notification' }, async (v) => { if (await saveNotif({ style: v })) rerender(); })),
+      overlay ? el('div', { className: 'field' }, el('span', { className: 'lbl', textContent: 'Theme' }), themes) : null,
+      overlay ? el('div', { className: 'field' }, el('span', { className: 'lbl', textContent: 'Position' }), posGrid, el('span', { className: 'small dim', textContent: n.position })) : null,
+      overlay ? null : el('p', { className: 'small dim', textContent: 'macOS places system notifications itself; theme and position apply to Peon banners only.' })),
+    el('div', { className: 'group' }, el('h3', { textContent: 'Behaviour' }),
+      el('div', { className: 'field' }, el('span', { className: 'lbl', textContent: 'Stays on screen' }), dismiss),
+      overlay ? boolField('All screens', 'all_screens', 'Show the banner on every display') : null,
+      overlay && n.theme !== 'neon' ? boolField('Close button', 'close_button') : null,
+      overlay ? boolField('Stack banners', 'stacking', 'Keep earlier banners from the same session') : null),
+    el('div', { className: 'group' }, el('h3', { textContent: 'Title' }),
+      el('div', { className: 'field' }, el('span', { className: 'lbl', textContent: 'Label' }), title),
+      boolField('Add tool name', 'title_ide', 'e.g. “my-app - Claude Code”')),
+    el('div', { className: 'group' }, el('h3', { textContent: 'Messages' }),
+      el('p', { className: 'small dim', style: 'margin:0 0 4px', textContent: 'Leave empty for peon-ping’s default text.' }),
+      tplFields, vars));
+
+  const previewSel = el('select', { onchange: () => { notif.previewKey = previewSel.value; renderNotifPreview(); } }, o.templates.map((k) => el('option', { value: k, textContent: TEMPLATE_INFO[k].title })));
+  previewSel.value = notif.previewKey;
+  notif.previewSel = previewSel;
+  const preview = el('div', { className: 'card group' },
+    el('div', { className: 'field', style: 'padding-top:0' }, el('h3', { style: 'margin:0', textContent: 'Preview' }), el('span', { style: 'margin-left:auto' }, previewSel)),
+    el('div', { id: 'pvMap', className: 'map' }),
+    el('div', { id: 'pvStage', className: 'stage' }),
+    el('p', { id: 'pvNote', className: 'pv-note' }));
+
+  const enabled = el('label', { className: 'switch-label' },
+    switchEl(n.enabled, async (input) => { input.disabled = true; if (await saveNotif({ enabled: input.checked }, input.checked ? 'Pop-ups on' : 'Pop-ups off')) rerender(); else input.checked = !input.checked; input.disabled = false; }, 'Show pop-ups'),
+    'Show pop-ups');
+  const test = el('button', { className: 'btn primary', textContent: 'Send test', disabled: !n.enabled, onclick: async () => {
+    test.disabled = true;
+    done(await post('/api/notifications/test', {}), 'Test sent');
+    test.disabled = false;
+  } });
+
+  setTimeout(renderNotifPreview);
+  return [
+    el('div', { className: 'page-head' },
+      el('div', {}, el('h1', { textContent: 'Notifications' }), el('p', { textContent: 'How peon-ping’s pop-ups look. Changes save as you go.' })),
+      el('div', { className: 'actions', style: 'align-items:center;gap:16px' }, enabled, test)),
+    el('div', { className: 'notif' + (n.enabled ? '' : ' disabled') }, settings, el('div', { className: 'preview-col' }, preview)),
+  ];
+}
+
+function renderNotifPreview() {
+  const stage = $('#pvStage');
+  if (!stage || !notif.data) return;
+  const n = notif.data;
+  const key = notif.previewKey;
+  const info = TEMPLATE_INFO[key];
+  if (notif.previewSel) notif.previewSel.value = key;
+  const map = $('#pvMap');
+  const note = $('#pvNote');
+  map.replaceChildren(el('div', { className: 'mb' }));
+  stage.replaceChildren();
+
+  if (!n.enabled) { stage.append(el('div', { className: 'pv-empty', textContent: 'Pop-ups are off.' })); note.textContent = ''; return; }
+  if (info.noPopup) {
+    stage.append(el('div', { className: 'pv-empty', textContent: 'Tool errors only play a sound — peon-ping shows no pop-up for them. This template is used for phone notifications and spoken alerts.' }));
+    note.textContent = '';
+    return;
+  }
+
+  const tpl = n.templates[key];
+  const msg = tpl ? tpl.replace(/\{(\w+)\}/g, (_, k) => SAMPLE_VARS[k] ?? '') : info.sample;
+  const title = (n.title || SAMPLE_VARS.project) + (n.title_ide ? ' - ' + SAMPLE_VARS.ide : '');
+  const icon = '/api/icon?pack=' + encodeURIComponent(store.status ? store.status.default_pack : 'peon');
+  const standard = n.style === 'standard';
+  // notify.sh: the big line is the title, the small line is MSG_SUBTITLE or else the message
+  const sub = info.subtitle || msg;
+  const theme = standard ? 'mac' : n.theme;
+  const accent = standard ? '' : ACCENTS[n.theme][info.color];
+  const dismiss = n.dismiss_seconds;
+
+  let banner;
+  if (standard) banner = macBanner(title, info.subtitle || '', msg, icon);
+  else if (theme === 'glass') banner = glassBanner(title, sub, info.type, accent, n.close_button, dismiss);
+  else if (theme === 'sakura') banner = sakuraBanner(title, sub, info.type, accent, n.close_button, dismiss);
+  else if (theme === 'jarvis') banner = jarvisBanner(title, sub, info.type, accent, n.close_button, dismiss);
+  else banner = classicBanner(title, sub, accent, icon);
+
+  const fit = el('div', { className: 'fit' }, banner);
+  stage.append(fit);
+  requestAnimationFrame(() => {
+    const w = banner.offsetWidth, h = banner.offsetHeight;
+    const k = Math.min(1, (stage.clientWidth - 24) / w);
+    fit.style.transform = 'scale(' + k + ')';
+    fit.style.height = h * k + 'px';
+    fit.style.width = w * k + 'px';
+    fit.style.transformOrigin = 'top left';
+  });
+
+  // Where it lands on a 1512×982 pt screen (MacBook Pro 14"), same maths as the overlay scripts
+  const SW = 1512, SH = 982, MB = 24, M = 10;
+  const [cw, ch] = standard ? [344, 64] : THEME_INFO[theme].size;
+  const pad = standard ? 0 : THEME_INFO[theme].pad;
+  const ww = cw + pad * 2, wh = ch + pad * 2;
+  const pos = standard ? 'top-right' : n.position;
+  const [v, h] = pos.split('-');
+  let x = h === 'left' ? M : h === 'right' ? SW - ww - M : (SW - ww) / 2;
+  let y = v === 'top' ? MB + M : SH - wh - M;
+  if (standard) { x = SW - ww - 16; y = MB + 14; }
+  const spot = el('div', { className: 'spot' });
+  Object.assign(spot.style, {
+    left: (x + pad) / SW * 100 + '%', top: (y + pad) / SH * 100 + '%', width: cw / SW * 100 + '%', height: ch / SH * 100 + '%',
+    background: standard ? 'rgba(246,246,246,.9)' : theme === 'neon' ? accent : 'rgba(20,18,26,.92)',
+    borderRadius: theme === 'jarvis' ? '50%' : '3px',
+    outline: !standard && theme !== 'neon' ? '1px solid ' + accent : '',
+  });
+  map.append(spot);
+
+  const bits = ['Real size, scaled to fit.'];
+  if (standard) bits.push('macOS draws this one, so the exact look follows your system settings.');
+  if (!standard && theme === 'neon') bits.push('The icon is your default pack’s.');
+  if (info.subtitle && !standard) bits.push('peon-ping always shows “Question pending” on the banner; your Question template appears in macOS notifications and on your phone.');
+  bits.push('“Send test” shows the real thing.');
+  note.textContent = bits.join(' ');
+}
+
+function xButton(accent, right, top) {
+  const x = el('div', { className: 'ov-x', textContent: '×' });
+  Object.assign(x.style, { color: accent, opacity: .7, right: right + 'px', top: top + 'px' });
+  return x;
+}
+
+function progressBar(accent, dismiss) {
+  const bar = el('div', { className: 'progress' + (dismiss > 0 ? ' run' : '') });
+  bar.style.background = accent;
+  if (dismiss > 0) bar.style.animationDuration = dismiss + 's';
+  return bar;
+}
+
+function classicBanner(title, sub, color, icon) {
+  const box = el('div', { className: 'ov-classic icon' },
+    el('img', { src: icon, alt: '', onerror: (e) => { e.target.remove(); box.classList.remove('icon'); } }),
+    el('div', { className: 't', textContent: title }),
+    el('div', { className: 's', textContent: sub }),
+    el('div', { className: 'hint', textContent: 'click to focus' }));
+  box.style.background = color;
+  return box;
+}
+
+function glassBanner(title, sub, type, accent, closeBtn, dismiss) {
+  const now = new Date();
+  const box = el('div', { className: 'ov-glass' },
+    el('div', { className: 'gbar', style: 'background:' + accent }),
+    el('div', { className: 'type', textContent: type, style: 'color:' + accent }),
+    el('div', { className: 't', textContent: title }),
+    el('div', { className: 's', textContent: sub }),
+    el('div', { className: 'ts', textContent: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') }),
+    progressBar(accent, dismiss));
+  if (closeBtn) box.append(xButton(accent, 2, 2));
+  return box;
+}
+
+function sakuraBanner(title, sub, type, accent, closeBtn, dismiss) {
+  const box = el('div', { className: 'ov-sakura' });
+  box.innerHTML = '<svg class="bonsai" viewBox="0 0 120 130" aria-hidden="true">' +
+    '<g transform="translate(72,130) scale(1,-1)">' +
+    '<path d="M-12 18 L12 18 L10 24 L-10 24Z M-14 24 L14 24 L14 27 L-14 27Z" fill="rgba(64,38,26,.5)"/>' +
+    '<path d="M-5 27 C-8 38 -10 50 -6 62 C-3 70 -2 76 -2 80 C-1 82 2 82 3 80 C3 76 4 70 6 62 C9 50 7 38 5 27Z" fill="rgba(56,36,23,.5)"/>' +
+    '<g fill="none" stroke="rgba(51,33,20,.4)" stroke-linecap="round"><path d="M1 72 C10 76 22 80 36 78" stroke-width="2"/><path d="M-1 74 C-14 80 -28 82 -38 78" stroke-width="1.8"/><path d="M0 80 C1 88 2 96 3 104" stroke-width="1.4"/></g>' +
+    '<g class="pads"></g></g></svg>';
+  const pads = box.querySelector('.pads');
+  for (const [x, y, rx, ry] of [[36, 80, 18, 12], [22, 98, 13, 10], [-36, 80, 16, 11], [-24, 98, 12, 9], [3, 108, 16, 13], [-10, 104, 11, 9]]) {
+    pads.insertAdjacentHTML('beforeend', '<ellipse cx="' + x + '" cy="' + y + '" rx="' + rx + '" ry="' + ry + '" fill="' + accent + '" fill-opacity=".28"/>' +
+      '<ellipse cx="' + (x + 1) + '" cy="' + (y + 2) + '" rx="' + rx * .75 + '" ry="' + ry * .7 + '" fill="' + accent + '" fill-opacity=".3"/>');
+  }
+  for (let i = 0; i < 10; i++) {
+    const p = el('div', { className: 'petal' });
+    Object.assign(p.style, { left: (10 + i * 33) + 'px', animationDuration: (4 + (i * 7) % 5) + 's', animationDelay: (-i * 0.7) + 's', opacity: i % 3 ? .45 : .8 });
+    box.append(p);
+  }
+  box.append(
+    el('div', { className: 'kanji', textContent: '桜', style: 'color:' + accent }),
+    el('div', { className: 'type', textContent: type, style: 'color:' + accent }),
+    el('div', { className: 't', textContent: title }),
+    el('div', { className: 's', textContent: sub }),
+    progressBar(accent, dismiss));
+  if (closeBtn) box.append(xButton(accent, 2, 2));
+  return box;
+}
+
+function jarvisBanner(title, sub, type, accent, closeBtn, dismiss) {
+  const box = el('div', { className: 'ov-jarvis' });
+  const C = 2 * Math.PI * 110;
+  let ticks = '';
+  for (let i = 0; i < 72; i++) {
+    const a = i / 72 * 2 * Math.PI, r1 = 128, r2 = i % 6 ? 131 : 135;
+    ticks += '<line x1="' + (150 + Math.cos(a) * r1).toFixed(1) + '" y1="' + (150 + Math.sin(a) * r1).toFixed(1) + '" x2="' + (150 + Math.cos(a) * r2).toFixed(1) + '" y2="' + (150 + Math.sin(a) * r2).toFixed(1) + '"/>';
+  }
+  box.innerHTML = '<svg viewBox="0 0 300 300" aria-hidden="true">' +
+    '<defs><radialGradient id="jv"><stop offset="0" stop-color="rgb(3,5,15)"/><stop offset="1" stop-color="rgb(8,13,31)"/></radialGradient></defs>' +
+    '<circle cx="150" cy="150" r="148" fill="url(#jv)" fill-opacity=".93" style="filter:drop-shadow(0 0 22px ' + accent + ')"/>' +
+    '<circle cx="150" cy="150" r="146" fill="none" stroke="rgba(26,38,77,.35)" stroke-width="4"/>' +
+    '<g stroke="rgba(38,64,128,.45)" fill="none"><circle cx="150" cy="150" r="138" stroke-dasharray="2 8"/><circle cx="150" cy="150" r="96" stroke-dasharray="3 12"/><circle cx="150" cy="150" r="62" stroke-dasharray="1 6"/></g>' +
+    '<g stroke="' + accent + '" stroke-opacity=".35" stroke-width="1">' + ticks + '</g>' +
+    '<g class="spin" fill="none" stroke="' + accent + '"><circle cx="150" cy="150" r="122" stroke-opacity=".55" stroke-width="2" stroke-dasharray="90 40 30 60 120 50"/></g>' +
+    '<g class="spin rev" fill="none" stroke="' + accent + '"><circle cx="150" cy="150" r="88" stroke-opacity=".75" stroke-width="1.5" stroke-dasharray="40 20 70 30"/></g>' +
+    '<g class="spin" fill="none" stroke="rgb(217,184,38)" stroke-opacity=".6"><circle cx="150" cy="150" r="100" stroke-width="1.5" stroke-dasharray="4 30"/></g>' +
+    '<circle cx="150" cy="150" r="110" fill="none" stroke="' + accent + '" stroke-opacity=".35" stroke-width="10" transform="rotate(-90 150 150)"' +
+    ' stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '">' +
+    (dismiss > 0 ? '<animate attributeName="stroke-dashoffset" from="' + C.toFixed(1) + '" to="0" dur="' + dismiss + 's" repeatCount="indefinite"/>' : '') + '</circle>' +
+    '</svg>';
+  const line = (text, top, size, weight, color) => {
+    const d = el('div', { className: 'txt', textContent: text });
+    Object.assign(d.style, { top: top + 'px', fontSize: size + 'px', fontWeight: weight, color });
+    return d;
+  };
+  box.append(
+    line('J.A.R.V.I.S', 113, 14, 500, accent),
+    line(type, 138, 9, 500, accent),
+    line(title, 168, 14, 400, 'rgba(217,230,255,.75)'),
+    line(sub, 188, 11, 400, 'rgba(191,204,230,.55)'));
+  box.querySelectorAll('.txt')[0].style.opacity = .6;
+  box.querySelectorAll('.txt')[1].style.opacity = .6;
+  if (closeBtn) box.append(xButton(accent, -10, -10));
+  return box;
+}
+
+function macBanner(title, subtitle, msg, icon) {
+  return el('div', { className: 'ov-mac' },
+    el('img', { src: icon, alt: '', onerror: (e) => (e.target.style.visibility = 'hidden') }),
+    el('div', { className: 'body' },
+      el('div', { className: 'row1' }, el('b', { textContent: title }), el('span', { className: 'when', textContent: 'now' })),
+      subtitle ? el('div', { className: 'sub', textContent: subtitle }) : null,
+      el('div', { textContent: msg })));
+}
+
+/* ---------- router ---------- */
+let routeSeq = 0;
+async function route() {
+  const seq = ++routeSeq;
+  const hash = location.hash || '#/packs';
+  const keepScroll = hash === route.last;
+  const y = window.scrollY;
+  route.last = hash;
+  try {
+    let nodes;
+    if (hash.startsWith('#/pack/')) nodes = await viewPack(decodeURIComponent(hash.slice(7)));
+    else if (hash.startsWith('#/tools')) nodes = viewTools();
+    else if (hash.startsWith('#/browse')) nodes = await viewBrowse();
+    else if (hash.startsWith('#/notifications')) nodes = await viewNotifications();
+    else nodes = viewPacks();
+    if (seq !== routeSeq) return;
+    $('#view').replaceChildren(...nodes);
+    if (keepScroll) window.scrollTo(0, y);
+    else window.scrollTo(0, 0);
+  } catch (err) {
+    if (seq === routeSeq) $('#view').replaceChildren(el('div', { className: 'loading', textContent: err.message }));
+  }
+}
+window.addEventListener('hashchange', () => { stopAudio(); route(); });
+
+refreshCore().then(route).catch((err) => $('#view').replaceChildren(el('div', { className: 'loading', textContent: err.message })));
+</script>
+</body>
+</html>

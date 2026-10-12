@@ -1,0 +1,46 @@
+{
+  "name": "peon-ping-editor",
+  "version": "0.2.0",
+  "description": "UI for peon-ping: edit sound packs, pick a pack per AI coding tool (Claude Code, Copilot, Cursor, Codex), install packs from the registry, style notifications, plus a macOS menu-bar toggle",
+  "license": "MIT",
+  "author": "Serhii Husachenko",
+  "keywords": [
+    "peon-ping",
+    "peon",
+    "openpeon",
+    "cesp",
+    "claude-code",
+    "github-copilot",
+    "cursor",
+    "codex",
+    "ai-coding",
+    "sound-pack",
+    "sounds",
+    "notifications",
+    "editor",
+    "gui",
+    "ui",
+    "menu-bar",
+    "macos",
+    "warcraft"
+  ],
+  "bin": {
+    "peon-editor": "bin/peon-editor.js",
+    "peon-ping-editor": "bin/peon-editor.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "public",
+    "menubar",
+    "install.sh",
+    "uninstall.sh"
+  ],
+  "scripts": {
+    "start": "node bin/peon-editor.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
